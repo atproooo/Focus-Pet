@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical">
+
+    <TextView
+        android:id="@+id/hatching_back"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingTop="8dp"
+        android:paddingBottom="12dp"
+        android:text="‹  Back to collection"
+        android:textColor="@color/focuspet_purple_dark"
+        android:textSize="16sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/hatching_egg_art"
+        android:layout_width="match_parent"
+        android:layout_height="240dp"
+        android:background="@drawable/bg_focuspet_image_placeholder"
+        android:contentDescription="Reserved large Pet Egg artwork and animation space"
+        android:gravity="center"
+        android:text="PET EGG&#10;ARTWORK / ANIMATION"
+        android:textColor="@color/focuspet_purple"
+        android:textSize="22sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/hatching_title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingTop="18dp"
+        android:text="Hatch a Pet Egg"
+        android:textColor="@color/focuspet_purple_dark"
+        android:textSize="26sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/hatching_inventory"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:background="@drawable/bg_focuspet_card"
+        android:padding="16dp"
+        android:textColor="@color/focuspet_muted_text"
+        android:textSize="17sp" />
+
+    <Button
+        android:id="@+id/hatch_button"
+        android:layout_width="match_parent"
+        android:layout_height="58dp"
+        android:layout_marginTop="16dp"
+        android:background="@drawable/bg_focuspet_hatch_disabled"
+        android:text="Hatch Egg"
+        android:textAllCaps="false"
+        android:textColor="@color/white"
+        android:textSize="16sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/hatching_result_placeholder"
+        android:layout_width="match_parent"
+        android:layout_height="180dp"
+        android:layout_marginTop="18dp"
+        android:background="@drawable/bg_focuspet_lavender"
+        android:contentDescription="Reserved space for newly hatched pet artwork, name, rarity, and customization"
+        android:gravity="center"
+        android:padding="16dp"
+        android:text="SPACE RESERVED FOR&#10;NEW PET RESULT, NAME, RARITY,&#10;AND CUSTOMIZATION"
+        android:textColor="@color/focuspet_purple_dark"
+        android:textSize="16sp"
+        android:textStyle="bold" />
+</LinearLayout>

@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical">
+
+    <TextView
+        android:id="@+id/stats_intro"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Focus Statistics"
+        android:textColor="@color/focuspet_purple_dark"
+        android:textSize="21sp"
+        android:textStyle="bold" />
+
+    <LinearLayout
+        android:id="@+id/stats_cards"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:orientation="vertical" />
+
+    <TextView
+        android:id="@+id/history_title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingTop="22dp"
+        android:paddingBottom="8dp"
+        android:text="Focus history"
+        android:textColor="@color/focuspet_purple_dark"
+        android:textSize="21sp"
+        android:textStyle="bold" />
+
+    <LinearLayout
+        android:id="@+id/history_container"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical" />
+</LinearLayout>

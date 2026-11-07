@@ -24,6 +24,7 @@ public class FocusService extends Service {
     public static final String EXTRA_MINUTES = "minutes";
     public static final String EXTRA_LABEL = "label";
     public static final String EXTRA_REMAINING = "remaining";
+    public static final String EXTRA_SESSION_ID = "session_id";
     private static final String CHANNEL = "focus_timer";
     private long endAt;
     private long remaining;
@@ -33,10 +34,13 @@ public class FocusService extends Service {
     private Thread worker;
     private volatile int workerGeneration;
     private FocusStore store;
+    private FocusRepository repository;
+    private long sessionId;
 
     @Override public void onCreate() {
         super.onCreate();
         store = new FocusStore(this);
+        repository = new FocusRepository(this);
         restoreFromStore();
         NotificationManager manager = getSystemService(NotificationManager.class);
         manager.createNotificationChannel(new NotificationChannel(CHANNEL, "Focus timer",
@@ -51,6 +55,9 @@ public class FocusService extends Service {
             endAt = SystemClock.elapsedRealtime() + duration;
             paused = false;
             stopped = false;
+            sessionId = repository.startSession((int) (duration / 60_000L),
+                    intent.getStringExtra(EXTRA_LABEL));
+            store.setActiveSessionId(sessionId);
             store.saveActiveSession(endAt, (int) (duration / 60_000L));
             startForeground(21, notification());
             startWorker();
@@ -73,6 +80,8 @@ public class FocusService extends Service {
             store.saveActiveSessionState(endAt, (int) (duration / 60_000L), false, remaining);
             startWorker();
         } else if (ACTION_CANCEL.equals(action)) {
+            repository.cancelSession(sessionId > 0 ? sessionId : store.activeSessionId(),
+                    (int) Math.max(0, duration / 60_000L - remaining / 60_000L));
             store.clearActiveSession();
             sendBroadcast(new Intent(ACTION_CANCELLED).setPackage(getPackageName()));
             stopSelf();
@@ -89,9 +98,12 @@ public class FocusService extends Service {
                 sendBroadcast(new Intent(ACTION_TICK).setPackage(getPackageName())
                         .putExtra(EXTRA_REMAINING, remaining));
                 if (remaining == 0) {
+                    repository.completeSession(sessionId > 0 ? sessionId : store.activeSessionId(),
+                            (int) (duration / 60_000L));
                     store.clearActiveSession();
                     sendBroadcast(new Intent(ACTION_COMPLETE).setPackage(getPackageName())
-                            .putExtra(EXTRA_MINUTES, (int) (duration / 60_000L)));
+                            .putExtra(EXTRA_MINUTES, (int) (duration / 60_000L))
+                            .putExtra(EXTRA_SESSION_ID, sessionId));
                     completionNotification();
                     stopSelf();
                     return;
@@ -106,6 +118,7 @@ public class FocusService extends Service {
     private void restoreFromStore() {
         if (!store.hasActiveSession()) return;
         duration = Math.max(1L, store.activeMinutes() * 60_000L);
+        sessionId = store.activeSessionId();
         paused = store.activePaused();
         endAt = store.activeEndAt();
         remaining = paused ? store.activeRemaining()

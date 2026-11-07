@@ -14,7 +14,9 @@ import android.os.Bundle;
 import android.os.SystemClock;
 import android.text.InputType;
 import android.view.Gravity;
+import android.view.LayoutInflater;
 import android.view.View;
+import android.widget.FrameLayout;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
@@ -28,11 +30,14 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
+import androidx.appcompat.app.AlertDialog;
 import android.graphics.drawable.GradientDrawable;
 
 import java.util.Locale;
 import java.util.ArrayList;
 import java.util.List;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 
 public class MainActivity extends AppCompatActivity {
     private static final int NOTIFICATION_REQUEST = 7;
@@ -42,35 +47,41 @@ public class MainActivity extends AppCompatActivity {
     private static final int CARD = Color.rgb(232, 226, 234);
     private static final int LAVENDER = Color.rgb(238, 224, 255);
     private FocusStore store;
+    private FocusRepository repository;
     private LinearLayout content;
     private LinearLayout navigation;
     private TextView title;
+    private TextView debugButton;
     private BroadcastReceiver timerReceiver;
     private final List<LinearLayout> navigationItems = new ArrayList<>();
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
         store = new FocusStore(this);
+        repository = new FocusRepository(this);
         buildShell();
         requestNotifications();
         if (store.hasActiveSession()) {
             ContextCompat.startForegroundService(this,
                     new Intent(this, FocusService.class).setAction(FocusService.ACTION_RESTORE));
             showActive(store.activeMinutes());
+        } else if (repository.latestPending() != null) {
+            showFinish(repository.latestPending().id, repository.latestPending().actualMinutes);
         } else {
             showHome();
         }
     }
 
     private void buildShell() {
-        LinearLayout root = new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
+        FrameLayout root = new FrameLayout(this);
         root.setBackgroundColor(SURFACE);
         ViewCompat.setOnApplyWindowInsetsListener(root, (view, insets) -> {
             int topInset = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top;
             view.setPadding(0, topInset, 0, 0);
             return insets;
         });
+        LinearLayout shell = new LinearLayout(this);
+        shell.setOrientation(LinearLayout.VERTICAL);
         LinearLayout header = new LinearLayout(this);
         header.setGravity(Gravity.CENTER_VERTICAL);
         title = text("Focus Grove", 25, Color.rgb(35, 29, 38));
@@ -85,14 +96,14 @@ public class MainActivity extends AppCompatActivity {
         iconParams.setMargins(dp(20), dp(12), dp(4), dp(8));
         header.addView(iconPlaceholder, iconParams);
         header.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
-        root.addView(header);
+        shell.addView(header);
         content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
         content.setPadding(dp(20), 0, dp(20), dp(32));
         ScrollView scroll = new ScrollView(this);
         scroll.setClipToPadding(false);
         scroll.addView(content);
-        root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
+        shell.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
         navigation = new LinearLayout(this);
         navigation.setGravity(Gravity.CENTER);
         navigation.setBackgroundColor(Color.rgb(248, 241, 250));
@@ -101,12 +112,80 @@ public class MainActivity extends AppCompatActivity {
         addNavigationButton(navigation, "📊", "Statistics", v -> showStats());
         addNavigationButton(navigation, "⚙️", "Settings", v -> showSettings());
         navigation.setPadding(dp(4), dp(6), dp(4), dp(6));
-        root.addView(navigation, new LinearLayout.LayoutParams(-1, dp(92)));
+        shell.addView(navigation, new LinearLayout.LayoutParams(-1, dp(92)));
+        root.addView(shell, new FrameLayout.LayoutParams(-1, -1));
+        if (BuildConfig.DEBUG) {
+            debugButton = text("⚙", 22, Color.WHITE);
+            debugButton.setGravity(Gravity.CENTER);
+            debugButton.setBackgroundResource(R.drawable.bg_focuspet_debug_button);
+            debugButton.setContentDescription("Development resource controls");
+            debugButton.setOnClickListener(v -> showDebugResourceDialog());
+            FrameLayout.LayoutParams debugParams =
+                    new FrameLayout.LayoutParams(dp(58), dp(58), Gravity.BOTTOM | Gravity.END);
+            debugParams.setMargins(0, 0, dp(16), dp(104));
+            root.addView(debugButton, debugParams);
+        }
         setContentView(root);
     }
 
     private void setSessionLock(boolean locked) {
         navigation.setVisibility(locked ? View.GONE : View.VISIBLE);
+        if (debugButton != null) debugButton.setVisibility(locked ? View.GONE : View.VISIBLE);
+    }
+
+    private void showDebugResourceDialog() {
+        if (!BuildConfig.DEBUG) return;
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setPadding(dp(20), dp(4), dp(20), 0);
+        panel.addView(text("Presets", 15, PURPLE_DARK));
+        LinearLayout presets = new LinearLayout(this);
+        presets.setGravity(Gravity.CENTER);
+        addDebugPreset(presets, "+10", 10);
+        addDebugPreset(presets, "+100", 100);
+        addDebugPreset(presets, "+1000", 1000);
+        panel.addView(presets);
+        EditText coins = debugAmount("Coins");
+        EditText essence = debugAmount("Life Essence");
+        EditText eggs = debugAmount("Pet Eggs");
+        panel.addView(coins);
+        panel.addView(essence);
+        panel.addView(eggs);
+        new AlertDialog.Builder(this).setTitle("Debug resources")
+                .setMessage("Development-only controls. These are removed from release builds.")
+                .setView(panel)
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Add resources", (dialog, which) -> {
+                    store.addDebugResources(parseAmount(coins), parseAmount(essence), parseAmount(eggs));
+                    recreate();
+                }).show();
+    }
+
+    private void addDebugPreset(LinearLayout parent, String label, int amount) {
+        Button preset = outlineButton(label, v -> {
+            store.addDebugResources(amount, amount, amount);
+            recreate();
+        });
+        preset.setTextSize(13);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(44), 1);
+        params.setMargins(dp(3), dp(3), dp(3), dp(3));
+        parent.addView(preset, params);
+    }
+
+    private EditText debugAmount(String label) {
+        EditText input = new EditText(this);
+        input.setHint(label + " amount");
+        input.setInputType(InputType.TYPE_CLASS_NUMBER);
+        input.setSingleLine(true);
+        return input;
+    }
+
+    private int parseAmount(EditText input) {
+        try {
+            return Math.max(0, Integer.parseInt(input.getText().toString().trim()));
+        } catch (NumberFormatException ignored) {
+            return 0;
+        }
     }
 
     @Override public void onBackPressed() {
@@ -363,7 +442,7 @@ public class MainActivity extends AppCompatActivity {
         encouragement.setGravity(Gravity.CENTER);
         encouragement.setPadding(0, dp(24), 0, dp(28));
         content.addView(encouragement);
-        Button end = outlineButton("End session", v -> sendService(FocusService.ACTION_CANCEL));
+        Button end = outlineButton("End session", v -> showEndSessionConfirmation());
         content.addView(end);
         timerReceiver = new BroadcastReceiver() {
             @Override public void onReceive(Context context, Intent intent) {
@@ -375,7 +454,8 @@ public class MainActivity extends AppCompatActivity {
                             Math.round(((double) elapsed / totalMillis) * 100)));
                     progress.setProgress(percent);
                 } else if (FocusService.ACTION_COMPLETE.equals(intent.getAction())) {
-                    showCompletion(intent.getIntExtra(FocusService.EXTRA_MINUTES, 0));
+                    showFinish(intent.getLongExtra(FocusService.EXTRA_SESSION_ID, 0),
+                            intent.getIntExtra(FocusService.EXTRA_MINUTES, 0));
                 } else if (FocusService.ACTION_CANCELLED.equals(intent.getAction())) {
                     if (timerReceiver != null) {
                         unregisterReceiver(timerReceiver);
@@ -394,6 +474,16 @@ public class MainActivity extends AppCompatActivity {
         ContextCompat.registerReceiver(this, timerReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED);
     }
 
+    private void showEndSessionConfirmation() {
+        new AlertDialog.Builder(this)
+                .setTitle("End focus session?")
+                .setMessage("Your progress will not receive completion rewards.")
+                .setNegativeButton("No", null)
+                .setPositiveButton("Yes, end session", (dialog, which) ->
+                        sendService(FocusService.ACTION_CANCEL))
+                .show();
+    }
+
     private void sendService(String action) {
         startService(new Intent(this, FocusService.class).setAction(action));
     }
@@ -403,19 +493,41 @@ public class MainActivity extends AppCompatActivity {
         return String.format(Locale.US, "%02d:%02d", seconds / 60, seconds % 60);
     }
 
-    private void showCompletion(int minutes) {
+    private void showFinish(long sessionId, int minutes) {
         if (timerReceiver != null) {
             unregisterReceiver(timerReceiver);
             timerReceiver = null;
         }
-        store.recordCompleted(minutes);
         reset("Session complete!");
         setSessionLock(false);
         setActiveTab(0);
+        content.addView(imagePlaceholder("SESSION CELEBRATION"));
         content.addView(text("🌟 Great work, your pet is proud.", 24, Color.rgb(74, 55, 95)));
-        content.addView(text("+" + minutes + " minutes focused\n+" + minutes + " XP\n+" + minutes + " coins",
+        content.addView(text(minutes + " minutes focused\nYour rewards are ready to claim.",
                 20, Color.DKGRAY));
-        content.addView(button("Back to home", v -> showHome()));
+        content.addView(button("Continue to claim", v -> showClaim(sessionId)));
+    }
+
+    private void showClaim(long sessionId) {
+        FocusSession session = repository.pendingSession(sessionId);
+        if (session == null || !FocusSession.STATUS_COMPLETED.equals(session.status)) {
+            showHome();
+            return;
+        }
+        reset("Claim rewards");
+        setActiveTab(0);
+        content.addView(imagePlaceholder("REWARD ANIMATION"));
+        content.addView(text("Your session rewards", 24, Color.rgb(74, 55, 95)));
+        content.addView(text("⭐ +" + session.xpReward + " XP\n"
+                + "🪙 +" + session.coinReward + " coins\n"
+                + "✨ +" + session.essenceReward + " Life Essence\n"
+                + (session.eggReward ? "🥚 Pet Egg found!" : "No Pet Egg this time"),
+                20, Color.DKGRAY));
+        content.addView(button("Claim rewards", v -> {
+            if (repository.claimRewards(sessionId)) {
+                showHome();
+            }
+        }));
     }
 
     private TextView imagePlaceholder(String label) {
@@ -432,20 +544,207 @@ public class MainActivity extends AppCompatActivity {
     private void showCollection() {
         reset("Pet collection");
         setActiveTab(1);
-        content.addView(imagePlaceholder("PET IMAGE"));
-        content.addView(text("🐱 Mochi\nCommon • Level " + store.level()
-                + "\nYour starter pet grows with every completed session.", 20, Color.rgb(74, 55, 95)));
-        content.addView(text("🔒 Fox — unlock at 100 coins\n🔒 Owl — unlock after a 7-day streak",
-                17, Color.DKGRAY));
+        LinearLayout screen = (LinearLayout) LayoutInflater.from(this)
+                .inflate(R.layout.screen_collection, content, false);
+        content.addView(screen);
+
+        LinearLayout resourceBar = screen.findViewById(R.id.resource_bar);
+        addResourceChip(resourceBar, "🪙\nCoins\n" + store.coins(), "Coins",
+                "Coins can be used for future shop items and pet accessories.");
+        addResourceChip(resourceBar, "✨\nEssence\n" + store.lifeEssence(), "Life Essence",
+                "Life Essence is used to hatch Pet Eggs. One egg requires 100 Essence.");
+        addResourceChip(resourceBar, "🥚  Eggs  " + store.petEggs(), "Pet Eggs", null);
+
+        LinearLayout ownedPets = screen.findViewById(R.id.owned_pets_container);
+        View mochi = LayoutInflater.from(this).inflate(R.layout.item_pet_card, ownedPets, false);
+        configurePetCard(mochi, "Mochi the Fox", "Common  •  Level " + store.level(),
+                "Selected companion  •  Tap for details", store.experience() % 100, 1f,
+                v -> showPetDetail());
+        ownedPets.addView(mochi);
+
+    }
+
+    private void addResourceChip(LinearLayout parent, String label, String title, String description) {
+        TextView chip = (TextView) LayoutInflater.from(this)
+                .inflate(R.layout.item_resource_chip, parent, false);
+        chip.setText(label);
+        chip.setText(label.replace("\n", "  "));
+        chip.setOnClickListener(v -> {
+            if ("Pet Eggs".equals(title)) {
+                showHatching();
+            } else {
+                new AlertDialog.Builder(this)
+                        .setTitle(title)
+                        .setMessage(description)
+                        .setPositiveButton("OK", null)
+                        .show();
+            }
+        });
+        parent.addView(chip);
+    }
+
+    private void configurePetCard(View card, String name, String meta, String hint,
+                                  int progressValue, float alpha, View.OnClickListener listener) {
+        card.setAlpha(alpha);
+        card.setOnClickListener(listener);
+        ((TextView) card.findViewById(R.id.pet_name)).setText(name);
+        ((TextView) card.findViewById(R.id.pet_meta)).setText(meta);
+        ((TextView) card.findViewById(R.id.pet_hint)).setText(hint);
+        ((ProgressBar) card.findViewById(R.id.pet_progress)).setProgress(progressValue);
+        card.findViewById(R.id.pet_image_placeholder)
+                .setContentDescription("Reserved artwork space for " + name);
+    }
+
+    private void showPetDetail() {
+        reset("Mochi's details");
+        setActiveTab(1);
+        LinearLayout screen = (LinearLayout) LayoutInflater.from(this)
+                .inflate(R.layout.screen_pet_detail, content, false);
+        content.addView(screen);
+        screen.findViewById(R.id.pet_detail_back).setOnClickListener(v -> showCollection());
+        ((TextView) screen.findViewById(R.id.pet_detail_name)).setText("Mochi the Fox");
+        ((TextView) screen.findViewById(R.id.pet_detail_meta)).setText(
+                "Common companion  •  Selected\nLevel " + store.level()
+                        + "  •  " + store.experience() + " XP\nMood / energy: ready to focus");
+        ((ProgressBar) screen.findViewById(R.id.pet_detail_progress))
+                .setProgress(store.experience() % 100);
+        ((TextView) screen.findViewById(R.id.pet_detail_description)).setText(
+                "Mochi grows stronger whenever you complete a focus session.\n\n"
+                        + "Unlock date and detailed pet attributes will be connected to the pet database later.");
+    }
+
+    private void showHatching() {
+        reset("Pet Egg hatching");
+        setActiveTab(1);
+        LinearLayout screen = (LinearLayout) LayoutInflater.from(this)
+                .inflate(R.layout.screen_hatching, content, false);
+        content.addView(screen);
+        screen.findViewById(R.id.hatching_back).setOnClickListener(v -> showCollection());
+
+        int eggs = store.petEggs();
+        int essence = store.lifeEssence();
+        boolean canHatch = eggs > 0 && essence >= 100;
+        ((TextView) screen.findViewById(R.id.hatching_inventory)).setText(
+                "Pet Eggs: " + eggs + "\nLife Essence: " + essence + " / 100 required");
+        Button hatchButton = screen.findViewById(R.id.hatch_button);
+        hatchButton.setBackgroundResource(canHatch
+                ? R.drawable.bg_focuspet_hatch_enabled
+                : R.drawable.bg_focuspet_hatch_disabled);
+        hatchButton.setOnClickListener(v -> {
+            if (store.consumeHatchingResources()) {
+                new AlertDialog.Builder(this)
+                        .setTitle("hatch success")
+                        .setMessage("Your egg has been opened. The new pet result area is ready for future pet generation.")
+                        .setPositiveButton("OK", (dialog, which) -> showHatching())
+                        .show();
+            } else {
+                new AlertDialog.Builder(this)
+                        .setTitle("Not enough resources")
+                        .setMessage("You need 1 Pet Egg and 100 Life Essence to hatch.")
+                        .setPositiveButton("OK", null)
+                        .show();
+            }
+        });
     }
 
     private void showStats() {
         reset("Focus statistics");
         setActiveTab(2);
-        content.addView(text("Total focus time: " + store.totalMinutes() + " minutes\n"
-                + "Completed sessions: " + store.sessions() + "\n"
-                + "Current streak: " + store.streak() + " days\n"
-                + "Longest streak: " + store.longestStreak() + " days", 20, Color.rgb(74, 55, 95)));
+        LinearLayout screen = (LinearLayout) LayoutInflater.from(this)
+                .inflate(R.layout.screen_statistics, content, false);
+        content.addView(screen);
+        LinearLayout statsCards = screen.findViewById(R.id.stats_cards);
+        View summary = LayoutInflater.from(this)
+                .inflate(R.layout.item_statistics_summary, statsCards, false);
+        ((TextView) summary.findViewById(R.id.summary_time_value))
+                .setText(store.totalMinutes() + " min");
+        ((TextView) summary.findViewById(R.id.summary_sessions_value))
+                .setText(String.valueOf(store.sessions()));
+        ((TextView) summary.findViewById(R.id.summary_current_value))
+                .setText(store.streak() + " days");
+        ((TextView) summary.findViewById(R.id.summary_longest_value))
+                .setText(store.longestStreak() + " days");
+        statsCards.addView(summary);
+
+        LinearLayout historyContainer = screen.findViewById(R.id.history_container);
+        List<FocusSession> history = repository.history();
+        if (history.isEmpty()) {
+            TextView empty = text("No focus sessions yet. Complete your first session to see it here.",
+                    16, Color.DKGRAY);
+            empty.setPadding(0, dp(8), 0, dp(12));
+            historyContainer.addView(empty);
+        } else {
+            for (FocusSession session : history) {
+                addHistoryRow(historyContainer, session);
+            }
+        }
+    }
+
+    private void addStatCard(LinearLayout parent, String label, String value) {
+        View card = LayoutInflater.from(this).inflate(R.layout.item_stat_card, parent, false);
+        ((TextView) card.findViewById(R.id.stat_label)).setText(label);
+        ((TextView) card.findViewById(R.id.stat_value)).setText(value);
+        parent.addView(card);
+    }
+
+    private void addHistoryRow(LinearLayout parent, FocusSession session) {
+        View row = LayoutInflater.from(this).inflate(R.layout.item_session_history, parent, false);
+        String label = session.label == null || session.label.trim().isEmpty()
+                ? "Focus session" : session.label;
+        String status = FocusSession.STATUS_CLAIMED.equals(session.status) ? "Completed"
+                : FocusSession.STATUS_CANCELLED.equals(session.status) ? "Ended early"
+                : "Reward pending";
+        ((TextView) row.findViewById(R.id.history_label)).setText(label + "  •  " + status);
+        String date = new SimpleDateFormat("MMM d, yyyy  h:mm a", Locale.US)
+                .format(new Date(session.startedAt));
+        ((TextView) row.findViewById(R.id.history_date)).setText(date);
+        ((TextView) row.findViewById(R.id.history_duration))
+                .setText(session.actualMinutes + " min");
+        row.setOnClickListener(v -> showHistoryDetail(session));
+        parent.addView(row);
+    }
+
+    private void showHistoryDetail(FocusSession session) {
+        reset("Focus session details");
+        setActiveTab(2);
+        LinearLayout screen = (LinearLayout) LayoutInflater.from(this)
+                .inflate(R.layout.screen_history_detail, content, false);
+        content.addView(screen);
+        screen.findViewById(R.id.history_detail_back).setOnClickListener(v -> showStats());
+
+        String label = session.label == null || session.label.trim().isEmpty()
+                ? "Focus session" : session.label;
+        String status = FocusSession.STATUS_CLAIMED.equals(session.status) ? "Completed"
+                : FocusSession.STATUS_CANCELLED.equals(session.status) ? "Ended early"
+                : "Reward pending";
+        ((TextView) screen.findViewById(R.id.history_detail_title)).setText(label);
+        ((TextView) screen.findViewById(R.id.history_detail_status)).setText(
+                status + "  •  " + session.actualMinutes + " minutes focused");
+
+        LinearLayout info = screen.findViewById(R.id.history_detail_info);
+        addDetailLine(info, "Started",
+                new SimpleDateFormat("MMM d, yyyy  h:mm a", Locale.US)
+                        .format(new Date(session.startedAt)));
+        addDetailLine(info, "Ended", session.endedAt > 0
+                ? new SimpleDateFormat("MMM d, yyyy  h:mm a", Locale.US)
+                .format(new Date(session.endedAt)) : "Still in progress");
+        addDetailLine(info, "Planned duration", session.plannedMinutes + " minutes");
+        addDetailLine(info, "Actual duration", session.actualMinutes + " minutes");
+
+        String rewards = FocusSession.STATUS_CLAIMED.equals(session.status)
+                ? "Rewards claimed\n⭐ +" + session.xpReward + " XP\n🪙 +" + session.coinReward
+                + " coins\n✨ +" + session.essenceReward + " Life Essence"
+                + (session.eggReward ? "\n🥚 Pet Egg found" : "")
+                : FocusSession.STATUS_CANCELLED.equals(session.status)
+                ? "No completion rewards were granted for this session."
+                : "Rewards are waiting to be claimed.";
+        ((TextView) screen.findViewById(R.id.history_detail_rewards)).setText(rewards);
+    }
+
+    private void addDetailLine(LinearLayout parent, String label, String value) {
+        TextView line = text(label + "\n" + value, 16, Color.rgb(75, 67, 80));
+        line.setPadding(0, dp(4), 0, dp(10));
+        parent.addView(line);
     }
 
     private void showSettings() {
@@ -459,13 +758,22 @@ public class MainActivity extends AppCompatActivity {
         TextView goalValue = text(store.dailyGoal() + " minutes", 18, Color.rgb(45, 39, 50));
         goalValue.setPadding(0, 0, 0, dp(28));
         content.addView(goalValue);
-        Button resetButton = outlineButton("Reset local progress", v -> {
-            store.reset();
-            showSettings();
-        });
+        Button resetButton = outlineButton("Reset local progress", v -> showResetConfirmation());
         content.addView(resetButton, new LinearLayout.LayoutParams(-1, dp(52)));
         content.addView(text("Focus Grove works offline. Your progress stays\non this device.",
                 18, Color.rgb(45, 39, 50)));
+    }
+
+    private void showResetConfirmation() {
+        new AlertDialog.Builder(this)
+                .setTitle("Reset local progress?")
+                .setMessage("This will permanently erase your focus history, rewards, pets, and streak progress from this device.")
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Reset progress", (dialog, which) -> {
+                    store.reset();
+                    showSettings();
+                })
+                .show();
     }
 
     private void requestNotifications() {

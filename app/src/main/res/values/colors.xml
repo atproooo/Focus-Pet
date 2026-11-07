@@ -2,4 +2,11 @@
 <resources>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+    <color name="focuspet_surface">#FFFFF8FF</color>
+    <color name="focuspet_card">#FFE8E2EA</color>
+    <color name="focuspet_lavender">#FFEDE1FF</color>
+    <color name="focuspet_purple">#FF6C50AE</color>
+    <color name="focuspet_purple_dark">#FF523991</color>
+    <color name="focuspet_text">#FF231D26</color>
+    <color name="focuspet_muted_text">#FF4B4350</color>
 </resources>

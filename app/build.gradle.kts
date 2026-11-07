@@ -31,6 +31,7 @@ android {
     }
     buildFeatures {
         viewBinding = true
+        buildConfig = true
     }
 }
 
@@ -41,6 +42,8 @@ dependencies {
     implementation(libs.material)
     implementation(libs.navigation.fragment)
     implementation(libs.navigation.ui)
+    implementation(libs.room.runtime)
+    annotationProcessor("androidx.room:room-compiler:${libs.versions.room.get()}")
     testImplementation(libs.junit)
     androidTestImplementation(libs.espresso.core)
     androidTestImplementation(libs.ext.junit)
