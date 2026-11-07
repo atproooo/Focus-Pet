@@ -80,10 +80,14 @@ public class FocusService extends Service {
             store.saveActiveSessionState(endAt, (int) (duration / 60_000L), false, remaining);
             startWorker();
         } else if (ACTION_CANCEL.equals(action)) {
-            repository.cancelSession(sessionId > 0 ? sessionId : store.activeSessionId(),
-                    (int) Math.max(0, duration / 60_000L - remaining / 60_000L));
+            long elapsedMillis = Math.max(0L, duration - remaining);
+            int actualMinutes = (int) (elapsedMillis / 60_000L);
+            long currentSessionId = sessionId > 0 ? sessionId : store.activeSessionId();
+            repository.completeEarlySession(currentSessionId, actualMinutes);
             store.clearActiveSession();
-            sendBroadcast(new Intent(ACTION_CANCELLED).setPackage(getPackageName()));
+            sendBroadcast(new Intent(ACTION_CANCELLED).setPackage(getPackageName())
+                    .putExtra(EXTRA_SESSION_ID, currentSessionId)
+                    .putExtra(EXTRA_MINUTES, actualMinutes));
             stopSelf();
         }
         return START_REDELIVER_INTENT;

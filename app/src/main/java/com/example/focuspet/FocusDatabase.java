@@ -6,9 +6,10 @@ import androidx.room.Database;
 import androidx.room.Room;
 import androidx.room.RoomDatabase;
 
-@Database(entities = {FocusSession.class}, version = 2, exportSchema = false)
+@Database(entities = {FocusSession.class, Pet.class}, version = 4, exportSchema = false)
 public abstract class FocusDatabase extends RoomDatabase {
     public abstract FocusSessionDao focusSessionDao();
+    public abstract PetDao petDao();
 
     private static volatile FocusDatabase instance;
 

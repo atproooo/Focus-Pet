@@ -12,11 +12,13 @@ import java.util.concurrent.Future;
  */
 public final class FocusRepository {
     private final FocusSessionDao sessions;
+    private final PetDao pets;
     private final FocusStore progress;
     private final ExecutorService databaseExecutor = Executors.newSingleThreadExecutor();
 
     public FocusRepository(Context context) {
         sessions = FocusDatabase.getInstance(context).focusSessionDao();
+        pets = FocusDatabase.getInstance(context).petDao();
         progress = new FocusStore(context);
     }
 
@@ -38,19 +40,34 @@ public final class FocusRepository {
     }
 
     public void completeSession(long id, int actualMinutes) {
+        completeSession(id, actualMinutes, false);
+    }
+
+    public void completeEarlySession(long id, int actualMinutes) {
+        if (actualMinutes > 0) completeSession(id, actualMinutes, true);
+    }
+
+    private void completeSession(long id, int actualMinutes, boolean endedEarly) {
         run(() -> {
             FocusSession session = sessions.findById(id);
             if (session == null || !FocusSession.STATUS_RUNNING.equals(session.status)) return null;
-            int baseEssence = Math.max(1, Math.min(5, Math.round(actualMinutes * 0.08f)));
+            int baseEssence = Math.max(1, Math.min(5, (int) (actualMinutes * 0.08f)));
             int essence = Math.max(1, Math.min(5, baseEssence + random.nextInt(3) - 1));
             int coins = actualMinutes + random.nextInt(4);
+            int xp = actualMinutes;
             int streak = progress.streak();
             int eggChance = Math.min(100, eggChance(actualMinutes) + Math.min(3, streak / 4));
+            if (endedEarly) {
+                xp = (int) (xp * 0.30f);
+                essence = (int) (essence * 0.30f);
+                coins = (int) (coins * 0.30f);
+                eggChance = (int) (eggChance * 0.30f);
+            }
             int misses = progress.eggMisses() + 1;
-            boolean egg = misses >= 10 || random.nextInt(100) < eggChance;
+            boolean egg = !endedEarly && (misses >= 10 || random.nextInt(100) < eggChance);
             progress.setEggMisses(egg ? 0 : misses);
             sessions.finish(id, FocusSession.STATUS_COMPLETED, System.currentTimeMillis(), actualMinutes,
-                    actualMinutes, coins, essence, egg);
+                    xp, coins, essence, egg, endedEarly);
             return null;
         });
     }
@@ -75,6 +92,10 @@ public final class FocusRepository {
                     || sessions.claim(id) != 1) return false;
             progress.addClaimedRewards(session.xpReward, session.coinReward,
                     session.essenceReward, session.eggReward);
+            Pet selected = pets.selected();
+            if (selected != null && session.xpReward > 0) {
+                pets.addExperience(selected.id, session.xpReward);
+            }
             return true;
         });
     }
@@ -102,5 +123,61 @@ public final class FocusRepository {
 
     public FocusSession latestPending() {
         return run(sessions::latestPending);
+    }
+
+    public List<Pet> pets() {
+        return run(pets::all);
+    }
+
+    public Pet selectedPet() {
+        return run(pets::selected);
+    }
+
+    public Pet ensureStarterPet() {
+        return run(() -> {
+            Pet selected = pets.selected();
+            if (pets.count() > 0) return selected != null ? selected : pets.all().get(0);
+            Pet starter = new Pet();
+            starter.templateId = "starter_fox";
+            starter.name = "Mochi";
+            starter.species = "Fox";
+            starter.rarity = "Common";
+            starter.imageKey = "pet_fox";
+            starter.appearanceData = "default_fox";
+            starter.description = "A calm companion who grows with your focus.";
+            starter.hatchedAt = System.currentTimeMillis();
+            starter.mood = 100;
+            starter.energy = 100;
+            starter.selected = true;
+            starter.id = pets.insert(starter);
+            return starter;
+        });
+    }
+
+    public Pet hatchDefaultPet() {
+        return run(() -> {
+            Pet pet = new Pet();
+            pet.templateId = "default_hatched";
+            pet.name = "New Companion";
+            pet.species = "Companion";
+            pet.rarity = "Common";
+            pet.imageKey = "pet_default";
+            pet.appearanceData = "default";
+            pet.description = "A newly hatched companion waiting to grow.";
+            pet.hatchedAt = System.currentTimeMillis();
+            pet.mood = 100;
+            pet.energy = 100;
+            pet.selected = false;
+            pet.id = pets.insert(pet);
+            return pet;
+        });
+    }
+
+    public void selectPet(long id) {
+        run(() -> {
+            pets.clearSelection();
+            pets.select(id);
+            return null;
+        });
     }
 }

@@ -59,6 +59,7 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(state);
         store = new FocusStore(this);
         repository = new FocusRepository(this);
+        repository.ensureStarterPet();
         buildShell();
         requestNotifications();
         if (store.hasActiveSession()) {
@@ -66,7 +67,8 @@ public class MainActivity extends AppCompatActivity {
                     new Intent(this, FocusService.class).setAction(FocusService.ACTION_RESTORE));
             showActive(store.activeMinutes());
         } else if (repository.latestPending() != null) {
-            showFinish(repository.latestPending().id, repository.latestPending().actualMinutes);
+            FocusSession pending = repository.latestPending();
+            showFinish(pending.id, pending.actualMinutes, pending.endedEarly);
         } else {
             showHome();
         }
@@ -194,6 +196,11 @@ public class MainActivity extends AppCompatActivity {
                     android.widget.Toast.LENGTH_SHORT).show();
             return;
         }
+        if (repository != null && repository.latestPending() != null) {
+            android.widget.Toast.makeText(this, "Claim the pending reward first.",
+                    android.widget.Toast.LENGTH_SHORT).show();
+            return;
+        }
         super.onBackPressed();
     }
 
@@ -307,45 +314,33 @@ public class MainActivity extends AppCompatActivity {
         reset("Focus Grove");
         setSessionLock(false);
         setActiveTab(0);
-        content.addView(text("Grow your focus, one calm session at a time.", 18, Color.rgb(35, 29, 38)));
-        content.addView(companionCard());
+        content.addView(text("Start a session with your pets today! ", 18, Color.rgb(35, 29, 38)));
+        View companion = companionCard();
+        companion.setOnClickListener(v -> showCompanionChooser());
+        content.addView(companion);
         TextView today = text("Today", 16, PURPLE);
         today.setTypeface(null, Typeface.BOLD);
         today.setPadding(dp(0), dp(24), dp(0), dp(0));
         content.addView(today);
         content.addView(text(store.todayMinutes() + " min focused", 28, Color.rgb(35, 29, 38)));
-        content.addView(text(store.sessions() + " sessions completed  •  Keep showing up!",
+        Pet selectedPet = repository.selectedPet();
+        content.addView(text(store.sessions() + " sessions completed.  Keep showing up!",
                 16, Color.rgb(45, 39, 50)));
         content.addView(button("Start focus", v -> showSetup()));
     }
 
     private View companionCard() {
-        LinearLayout card = new LinearLayout(this);
-        card.setGravity(Gravity.CENTER_VERTICAL);
-        card.setPadding(dp(14), dp(14), dp(14), dp(14));
-        card.setBackground(roundColor(CARD, 16));
-        TextView image = text("PET", 20, PURPLE);
-        image.setGravity(Gravity.CENTER);
-        image.setTypeface(null, Typeface.BOLD);
-        image.setBackground(roundColor(LAVENDER, 16));
-        LinearLayout.LayoutParams imageParams = new LinearLayout.LayoutParams(dp(132), dp(132));
-        card.addView(image, imageParams);
-
-        LinearLayout details = new LinearLayout(this);
-        details.setOrientation(LinearLayout.VERTICAL);
-        details.setPadding(dp(18), 0, 0, 0);
-        details.addView(text("Your companion", 16, Color.rgb(35, 29, 38)));
-        TextView name = text("Mochi the Fox", 24, Color.rgb(35, 29, 38));
-        name.setPadding(24, 0, 24, 0);
-        details.addView(name);
-        details.addView(text("Level " + store.level() + "  ·  " + store.experience() + " XP", 18, PURPLE));
-        ProgressBar progress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
-        progress.setMax(100);
-        progress.setProgress(store.experience() % 100);
-        progress.setProgressTintList(android.content.res.ColorStateList.valueOf(PURPLE));
-        details.addView(progress, new LinearLayout.LayoutParams(-1, dp(18)));
-        card.addView(details, new LinearLayout.LayoutParams(0, -2, 1));
-        LinearLayout.LayoutParams cardParams = new LinearLayout.LayoutParams(-1, dp(180));
+        View card = LayoutInflater.from(this).inflate(R.layout.item_pet_card, content, false);
+        Pet pet = repository.selectedPet();
+        String petName = pet == null ? "Mochi" : pet.name;
+        String species = pet == null ? "Fox" : pet.species;
+        int petLevel = pet == null ? store.level() : pet.level();
+        int petXp = pet == null ? store.experience() : pet.experience;
+        configurePetCard(card, petName + " the " + species,
+                "Level " + petLevel + "  ·  " + petXp + " XP",
+                "Your companion",
+                petXp % 100, 1f, v -> showCompanionChooser());
+        LinearLayout.LayoutParams cardParams = new LinearLayout.LayoutParams(-1, -2);
         cardParams.setMargins(0, dp(20), 0, dp(4));
         card.setLayoutParams(cardParams);
         return card;
@@ -455,15 +450,22 @@ public class MainActivity extends AppCompatActivity {
                     progress.setProgress(percent);
                 } else if (FocusService.ACTION_COMPLETE.equals(intent.getAction())) {
                     showFinish(intent.getLongExtra(FocusService.EXTRA_SESSION_ID, 0),
-                            intent.getIntExtra(FocusService.EXTRA_MINUTES, 0));
+                            intent.getIntExtra(FocusService.EXTRA_MINUTES, 0), false);
                 } else if (FocusService.ACTION_CANCELLED.equals(intent.getAction())) {
                     if (timerReceiver != null) {
                         unregisterReceiver(timerReceiver);
                         timerReceiver = null;
                     }
-                    android.widget.Toast.makeText(MainActivity.this, "Focus session ended early.",
-                            android.widget.Toast.LENGTH_SHORT).show();
-                    showHome();
+                    int minutes = intent.getIntExtra(FocusService.EXTRA_MINUTES, 0);
+                    if (minutes > 0) {
+                        showFinish(intent.getLongExtra(FocusService.EXTRA_SESSION_ID, 0),
+                                minutes, true);
+                    } else {
+                        android.widget.Toast.makeText(MainActivity.this,
+                                "Focus session ended before one minute; no reward was created.",
+                                android.widget.Toast.LENGTH_SHORT).show();
+                        showHome();
+                    }
                 }
             }
         };
@@ -477,7 +479,7 @@ public class MainActivity extends AppCompatActivity {
     private void showEndSessionConfirmation() {
         new AlertDialog.Builder(this)
                 .setTitle("End focus session?")
-                .setMessage("Your progress will not receive completion rewards.")
+                .setMessage("You can still claim rewards for the time you focused, but ending early may reduce XP, coins, Life Essence, and Pet Egg chances by 70%.")
                 .setNegativeButton("No", null)
                 .setPositiveButton("Yes, end session", (dialog, which) ->
                         sendService(FocusService.ACTION_CANCEL))
@@ -493,17 +495,18 @@ public class MainActivity extends AppCompatActivity {
         return String.format(Locale.US, "%02d:%02d", seconds / 60, seconds % 60);
     }
 
-    private void showFinish(long sessionId, int minutes) {
+    private void showFinish(long sessionId, int minutes, boolean endedEarly) {
         if (timerReceiver != null) {
             unregisterReceiver(timerReceiver);
             timerReceiver = null;
         }
         reset("Session complete!");
-        setSessionLock(false);
+        setSessionLock(true);
         setActiveTab(0);
         content.addView(imagePlaceholder("SESSION CELEBRATION"));
         content.addView(text("🌟 Great work, your pet is proud.", 24, Color.rgb(74, 55, 95)));
-        content.addView(text(minutes + " minutes focused\nYour rewards are ready to claim.",
+        content.addView(text(minutes + " minutes focused\n"
+                + (endedEarly ? "Partial rewards are ready to claim." : "Your rewards are ready to claim."),
                 20, Color.DKGRAY));
         content.addView(button("Continue to claim", v -> showClaim(sessionId)));
     }
@@ -515,6 +518,7 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
         reset("Claim rewards");
+        setSessionLock(true);
         setActiveTab(0);
         content.addView(imagePlaceholder("REWARD ANIMATION"));
         content.addView(text("Your session rewards", 24, Color.rgb(74, 55, 95)));
@@ -556,12 +560,16 @@ public class MainActivity extends AppCompatActivity {
         addResourceChip(resourceBar, "🥚  Eggs  " + store.petEggs(), "Pet Eggs", null);
 
         LinearLayout ownedPets = screen.findViewById(R.id.owned_pets_container);
-        View mochi = LayoutInflater.from(this).inflate(R.layout.item_pet_card, ownedPets, false);
-        configurePetCard(mochi, "Mochi the Fox", "Common  •  Level " + store.level(),
-                "Selected companion  •  Tap for details", store.experience() % 100, 1f,
-                v -> showPetDetail());
-        ownedPets.addView(mochi);
-
+        Pet selected = repository.selectedPet();
+        for (Pet pet : repository.pets()) {
+            View card = LayoutInflater.from(this).inflate(R.layout.item_pet_card, ownedPets, false);
+            configurePetCard(card, pet.name + " the " + pet.species,
+                    pet.rarity + "  •  Level " + pet.level(),
+                    pet.id == (selected == null ? -1 : selected.id)
+                            ? "Selected companion  •  Tap for details" : "Tap for details",
+                    pet.experience % 100, 1f, v -> showPetDetail(pet));
+            ownedPets.addView(card);
+        }
     }
 
     private void addResourceChip(LinearLayout parent, String label, String title, String description) {
@@ -595,22 +603,26 @@ public class MainActivity extends AppCompatActivity {
                 .setContentDescription("Reserved artwork space for " + name);
     }
 
-    private void showPetDetail() {
-        reset("Mochi's details");
+    private void showPetDetail(Pet pet) {
+        reset(pet.name + "'s details");
         setActiveTab(1);
         LinearLayout screen = (LinearLayout) LayoutInflater.from(this)
                 .inflate(R.layout.screen_pet_detail, content, false);
         content.addView(screen);
         screen.findViewById(R.id.pet_detail_back).setOnClickListener(v -> showCollection());
-        ((TextView) screen.findViewById(R.id.pet_detail_name)).setText("Mochi the Fox");
+        ((TextView) screen.findViewById(R.id.pet_detail_name))
+                .setText(pet.name + " the " + pet.species);
         ((TextView) screen.findViewById(R.id.pet_detail_meta)).setText(
-                "Common companion  •  Selected\nLevel " + store.level()
-                        + "  •  " + store.experience() + " XP\nMood / energy: ready to focus");
+                pet.rarity + " companion" + (pet.selected ? "  •  Selected" : "")
+                        + "\nLevel " + pet.level() + "  •  " + pet.experience + " XP"
+                        + "\nMood / energy: " + pet.mood + " / " + pet.energy);
         ((ProgressBar) screen.findViewById(R.id.pet_detail_progress))
-                .setProgress(store.experience() % 100);
+                .setProgress(pet.experience % 100);
         ((TextView) screen.findViewById(R.id.pet_detail_description)).setText(
-                "Mochi grows stronger whenever you complete a focus session.\n\n"
-                        + "Unlock date and detailed pet attributes will be connected to the pet database later.");
+                pet.description + "\n\nHatched: "
+                        + new SimpleDateFormat("MMM d, yyyy", Locale.US)
+                        .format(new Date(pet.hatchedAt))
+                        + "\nAppearance: " + pet.appearanceData);
     }
 
     private void showHatching() {
@@ -632,6 +644,7 @@ public class MainActivity extends AppCompatActivity {
                 : R.drawable.bg_focuspet_hatch_disabled);
         hatchButton.setOnClickListener(v -> {
             if (store.consumeHatchingResources()) {
+                repository.hatchDefaultPet();
                 new AlertDialog.Builder(this)
                         .setTitle("hatch success")
                         .setMessage("Your egg has been opened. The new pet result area is ready for future pet generation.")
@@ -645,6 +658,29 @@ public class MainActivity extends AppCompatActivity {
                         .show();
             }
         });
+    }
+
+    private void showCompanionChooser() {
+                reset("Choose companion");
+                setActiveTab(0);
+                LinearLayout screen = (LinearLayout) LayoutInflater.from(this)
+                        .inflate(R.layout.screen_companion_chooser, content, false);
+                content.addView(screen);
+                screen.findViewById(R.id.chooser_back).setOnClickListener(v -> showHome());
+                LinearLayout container = screen.findViewById(R.id.chooser_pet_container);
+                Pet selected = repository.selectedPet();
+                for (Pet pet : repository.pets()) {
+                    View card = LayoutInflater.from(this).inflate(R.layout.item_pet_card, container, false);
+                    configurePetCard(card, pet.name + " the " + pet.species,
+                            pet.rarity + "  •  Level " + pet.level(),
+                            pet.id == (selected == null ? -1 : selected.id)
+                                    ? "Selected companion  •  Tap to keep" : "Tap to select",
+                            pet.experience % 100, 1f, v -> {
+                                repository.selectPet(pet.id);
+                                showHome();
+                            });
+                    container.addView(card);
+                }
     }
 
     private void showStats() {
@@ -691,7 +727,8 @@ public class MainActivity extends AppCompatActivity {
         View row = LayoutInflater.from(this).inflate(R.layout.item_session_history, parent, false);
         String label = session.label == null || session.label.trim().isEmpty()
                 ? "Focus session" : session.label;
-        String status = FocusSession.STATUS_CLAIMED.equals(session.status) ? "Completed"
+        String status = session.endedEarly ? "Ended early"
+                : FocusSession.STATUS_CLAIMED.equals(session.status) ? "Completed"
                 : FocusSession.STATUS_CANCELLED.equals(session.status) ? "Ended early"
                 : "Reward pending";
         ((TextView) row.findViewById(R.id.history_label)).setText(label + "  •  " + status);
@@ -714,7 +751,8 @@ public class MainActivity extends AppCompatActivity {
 
         String label = session.label == null || session.label.trim().isEmpty()
                 ? "Focus session" : session.label;
-        String status = FocusSession.STATUS_CLAIMED.equals(session.status) ? "Completed"
+        String status = session.endedEarly ? "Ended early"
+                : FocusSession.STATUS_CLAIMED.equals(session.status) ? "Completed"
                 : FocusSession.STATUS_CANCELLED.equals(session.status) ? "Ended early"
                 : "Reward pending";
         ((TextView) screen.findViewById(R.id.history_detail_title)).setText(label);

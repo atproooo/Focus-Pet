@@ -19,6 +19,7 @@ public class FocusSession {
     public String label;
     public String status;
     public boolean rewardGranted;
+    public boolean endedEarly;
     public int xpReward;
     public int coinReward;
     public int essenceReward;

@@ -14,8 +14,8 @@ public interface FocusSessionDao {
     @Query("SELECT * FROM focus_sessions WHERE id = :id LIMIT 1")
     FocusSession findById(long id);
 
-    @Query("UPDATE focus_sessions SET status = :status, endedAt = :endedAt, actualMinutes = :actualMinutes, xpReward = :xp, coinReward = :coins, essenceReward = :essence, eggReward = :egg WHERE id = :id")
-    void finish(long id, String status, long endedAt, int actualMinutes, int xp, int coins, int essence, boolean egg);
+    @Query("UPDATE focus_sessions SET status = :status, endedAt = :endedAt, actualMinutes = :actualMinutes, xpReward = :xp, coinReward = :coins, essenceReward = :essence, eggReward = :egg, endedEarly = :endedEarly WHERE id = :id")
+    void finish(long id, String status, long endedAt, int actualMinutes, int xp, int coins, int essence, boolean egg, boolean endedEarly);
 
     @Query("UPDATE focus_sessions SET status = :status, endedAt = :endedAt, actualMinutes = :actualMinutes, rewardGranted = 0 WHERE id = :id")
     void cancel(long id, String status, long endedAt, int actualMinutes);
