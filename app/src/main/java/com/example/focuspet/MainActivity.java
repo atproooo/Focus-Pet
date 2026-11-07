@@ -54,6 +54,8 @@ public class MainActivity extends AppCompatActivity {
         buildShell();
         requestNotifications();
         if (store.hasActiveSession()) {
+            ContextCompat.startForegroundService(this,
+                    new Intent(this, FocusService.class).setAction(FocusService.ACTION_RESTORE));
             showActive(store.activeMinutes());
         } else {
             showHome();

@@ -14,6 +14,7 @@ import androidx.core.app.NotificationCompat;
 
 public class FocusService extends Service {
     public static final String ACTION_START = "com.example.focuspet.START";
+    public static final String ACTION_RESTORE = "com.example.focuspet.RESTORE";
     public static final String ACTION_PAUSE = "com.example.focuspet.PAUSE";
     public static final String ACTION_RESUME = "com.example.focuspet.RESUME";
     public static final String ACTION_CANCEL = "com.example.focuspet.CANCEL";
@@ -36,6 +37,7 @@ public class FocusService extends Service {
     @Override public void onCreate() {
         super.onCreate();
         store = new FocusStore(this);
+        restoreFromStore();
         NotificationManager manager = getSystemService(NotificationManager.class);
         manager.createNotificationChannel(new NotificationChannel(CHANNEL, "Focus timer",
                 NotificationManager.IMPORTANCE_LOW));
@@ -43,7 +45,7 @@ public class FocusService extends Service {
 
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
         String action = intent == null ? "" : intent.getAction();
-        if (ACTION_START.equals(action)) {
+        if (ACTION_START.equals(action) && !store.hasActiveSession()) {
             duration = intent.getIntExtra(EXTRA_MINUTES, 25) * 60_000L;
             remaining = duration;
             endAt = SystemClock.elapsedRealtime() + duration;
@@ -52,24 +54,34 @@ public class FocusService extends Service {
             store.saveActiveSession(endAt, (int) (duration / 60_000L));
             startForeground(21, notification());
             startWorker();
+        } else if (ACTION_START.equals(action) || ACTION_RESTORE.equals(action)
+                || action.isEmpty()) {
+            restoreFromStore();
+            if (store.hasActiveSession()) {
+                startForeground(21, notification());
+                if (!paused) startWorker();
+            }
         } else if (ACTION_PAUSE.equals(action) && !paused) {
             remaining = Math.max(0, endAt - SystemClock.elapsedRealtime());
             paused = true;
             workerGeneration++;
+            store.saveActiveSessionState(endAt, (int) (duration / 60_000L), true, remaining);
             updateNotification();
         } else if (ACTION_RESUME.equals(action) && paused) {
             endAt = SystemClock.elapsedRealtime() + remaining;
             paused = false;
+            store.saveActiveSessionState(endAt, (int) (duration / 60_000L), false, remaining);
             startWorker();
         } else if (ACTION_CANCEL.equals(action)) {
             store.clearActiveSession();
             sendBroadcast(new Intent(ACTION_CANCELLED).setPackage(getPackageName()));
             stopSelf();
         }
-        return START_NOT_STICKY;
+        return START_REDELIVER_INTENT;
     }
 
     private void startWorker() {
+        if (worker != null && worker.isAlive()) return;
         final int generation = ++workerGeneration;
         worker = new Thread(() -> {
             while (!paused && !stopped && generation == workerGeneration) {
@@ -89,6 +101,16 @@ public class FocusService extends Service {
             }
         });
         worker.start();
+    }
+
+    private void restoreFromStore() {
+        if (!store.hasActiveSession()) return;
+        duration = Math.max(1L, store.activeMinutes() * 60_000L);
+        paused = store.activePaused();
+        endAt = store.activeEndAt();
+        remaining = paused ? store.activeRemaining()
+                : Math.max(0L, endAt - SystemClock.elapsedRealtime());
+        stopped = false;
     }
 
     private Notification notification() {
@@ -117,9 +139,6 @@ public class FocusService extends Service {
     @Override public void onDestroy() {
         stopped = true;
         if (worker != null) worker.interrupt();
-        if (remaining > 0 && !paused) {
-            store.clearActiveSession();
-        }
         super.onDestroy();
     }
 

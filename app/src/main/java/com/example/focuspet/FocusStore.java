@@ -23,12 +23,19 @@ public final class FocusStore {
     public boolean hasActiveSession() { return preferences.getBoolean("active", false); }
     public long activeEndAt() { return preferences.getLong("active_end_at", 0); }
     public int activeMinutes() { return preferences.getInt("active_minutes", 0); }
+    public boolean activePaused() { return preferences.getBoolean("active_paused", false); }
+    public long activeRemaining() { return preferences.getLong("active_remaining", 0); }
     public void saveActiveSession(long endAt, int minutes) {
+        saveActiveSessionState(endAt, minutes, false, minutes * 60_000L);
+    }
+    public void saveActiveSessionState(long endAt, int minutes, boolean paused, long remaining) {
         preferences.edit().putBoolean("active", true).putLong("active_end_at", endAt)
-                .putInt("active_minutes", minutes).apply();
+                .putInt("active_minutes", minutes).putBoolean("active_paused", paused)
+                .putLong("active_remaining", remaining).apply();
     }
     public void clearActiveSession() {
-        preferences.edit().remove("active").remove("active_end_at").remove("active_minutes").apply();
+        preferences.edit().remove("active").remove("active_end_at").remove("active_minutes")
+                .remove("active_paused").remove("active_remaining").apply();
     }
     public void setDailyGoal(int value) {
         preferences.edit().putInt("daily_goal", Math.max(15, Math.min(240, value))).apply();
