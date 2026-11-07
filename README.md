@@ -1,755 +1,153 @@
+# FocusPet
+
+FocusPet is an offline-first Android focus timer presented as a lightweight pet-collection game. Users complete distraction-free focus sessions, earn rewards, grow companion pets, collect Life Essence and Pet Eggs, and review their focus history.
+
+The current project is an Android MVP for a single local user. It does not require an account or network connection.
+
+## Current features
+
+- Focus sessions with selectable durations and labels.
+- Foreground-service timer that continues while the app is backgrounded or the screen is locked.
+- Ongoing and completion notifications.
+- Finish and reward-claim flow with one-time claim protection.
+- Early-session rewards based on counted whole minutes, with reduced payout for ending early.
+- Randomized coins, Life Essence, and Pet Egg rewards.
+- Pet Egg hatching when the user has one egg and 100 Life Essence.
+- Persistent pets with names, species, rarity, level, experience, appearance data, hatch date, mood, energy, and selected companion state.
+- Companion selection from the home screen.
+- Collection screen with owned pets and resource inventory.
+- Pet detail screen with experience progress.
+- Statistics summary and clickable focus-history details.
+- Settings, notification permission handling, local reset, and debug-only resource controls.
+- XML-backed reusable pet cards and screen components, with some navigation/UI composition still handled by Java.
+
+## Technology
+
+| Area | Current implementation |
+|---|---|
+| Language | Java |
+| UI | Android Views, XML layouts, and programmatic Java composition |
+| Architecture | Feature-oriented prototype with `MainActivity`, repository, store, service, and Room DAOs |
+| Local database | Room 2.7.2 |
+| Preferences | `SharedPreferences` through `FocusStore` |
+| Timer | Android foreground service using `SystemClock.elapsedRealtime()` |
+| Notifications | Android notification channel and foreground notifications |
+| Minimum SDK | API 33 |
+| Compile/target SDK | API 37 |
+| Java compatibility | Java 11 |
+| Build system | Gradle Kotlin DSL, Android Gradle Plugin 9.3.3 |
+
+The original project plan mentioned Jetpack Compose, but the current implementation uses Android Views and XML. Navigation is currently performed by replacing content in `MainActivity` rather than using a complete Navigation Component graph.
+
+## Important files
+
+### Application and navigation
+
+- [`MainActivity.java`](app/src/main/java/com/example/focuspet/MainActivity.java) - Main activity, screen rendering, manual navigation, timer event handling, permission prompts, finish/claim locking, and debug UI.
+- [`AndroidManifest.xml`](app/src/main/AndroidManifest.xml) - Launcher activity, notification permission, foreground-service permissions, and `FocusService` registration.
+
+### Timer and rewards
+
+- [`FocusService.java`](app/src/main/java/com/example/focuspet/FocusService.java) - Starts, restores, pauses, resumes, and cancels focus sessions; sends timer broadcasts and notifications.
+- [`FocusRepository.java`](app/src/main/java/com/example/focuspet/FocusRepository.java) - Coordinates Room sessions and pets, calculates randomized rewards, completes sessions, and atomically claims rewards.
+- [`FocusStore.java`](app/src/main/java/com/example/focuspet/FocusStore.java) - Stores lightweight account progress, resources, streak values, and active-session state in `SharedPreferences`.
+
+### Room data model
+
+- [`FocusDatabase.java`](app/src/main/java/com/example/focuspet/FocusDatabase.java) - Room database containing sessions and pets.
+- [`FocusSession.java`](app/src/main/java/com/example/focuspet/FocusSession.java) - Session entity, timing fields, status, early-ending state, and reward values.
+- [`FocusSessionDao.java`](app/src/main/java/com/example/focuspet/FocusSessionDao.java) - Session lifecycle queries and atomic reward-claim update.
+- [`Pet.java`](app/src/main/java/com/example/focuspet/Pet.java) - Pet entity and level calculation.
+- [`PetDao.java`](app/src/main/java/com/example/focuspet/PetDao.java) - Pet listing, selection, insertion, and experience updates.
+
+### XML UI
+
+- [`item_pet_card.xml`](app/src/main/res/layout/item_pet_card.xml) - Reusable pet card used by the home companion card, collection, and companion chooser. It defines the artwork placeholder, aligned text column, one-line name, metadata, EXP label, and progress bar.
+- [`screen_collection.xml`](app/src/main/res/layout/screen_collection.xml) - Resource banner and owned-pet collection container.
+- [`screen_pet_detail.xml`](app/src/main/res/layout/screen_pet_detail.xml) - Pet detail framework and experience display.
+- [`screen_companion_chooser.xml`](app/src/main/res/layout/screen_companion_chooser.xml) - Companion selection screen.
+- [`screen_statistics.xml`](app/src/main/res/layout/screen_statistics.xml) - Statistics summary and focus-history containers.
+- [`item_statistics_summary.xml`](app/src/main/res/layout/item_statistics_summary.xml) - Combined time, sessions, current streak, and longest streak card.
+- [`item_session_history.xml`](app/src/main/res/layout/item_session_history.xml) and [`screen_history_detail.xml`](app/src/main/res/layout/screen_history_detail.xml) - History list rows and detail view.
+- [`screen_hatching.xml`](app/src/main/res/layout/screen_hatching.xml) - Pet Egg hatching screen with artwork and future customization space.
+
+### Build configuration
+
+- [`app/build.gradle.kts`](app/build.gradle.kts) - Android module configuration, SDK levels, Java compatibility, Room compiler, and test dependencies.
+- [`gradle/libs.versions.toml`](gradle/libs.versions.toml) - Dependency and plugin version catalog.
+- [`settings.gradle.kts`](settings.gradle.kts) - Project name, repositories, and module inclusion.
+- [`gradle.properties`](gradle.properties) - Gradle JVM configuration.
+
 ## Project structure
 
-The project is a single-module Android application:
-
 ```text
-Final-trial-2/
+FocusPet/
+├── app/
+│   ├── src/main/java/com/example/focuspet/
+│   │   ├── MainActivity.java
+│   │   ├── FocusService.java
+│   │   ├── FocusRepository.java
+│   │   ├── FocusStore.java
+│   │   ├── FocusSession*.java
+│   │   └── Pet*.java
+│   ├── src/main/res/layout/
+│   ├── src/main/res/drawable/
+│   └── build.gradle.kts
+├── gradle/libs.versions.toml
 ├── build.gradle.kts
 ├── settings.gradle.kts
-├── gradle.properties
-├── gradlew
-├── gradlew.bat
-├── local.properties
-├── gradle/
-│   ├── libs.versions.toml
-│   └── wrapper/
-└── app/
-    ├── build.gradle.kts
-    └── src/
-        ├── main/
-        │   ├── AndroidManifest.xml
-        │   ├── java/com/example/focuspet/
-        │   ├── res/
-        │   └── keepRules/
-        ├── test/
-        └── androidTest/
+└── README.md
 ```
 
-The `app/build/` directory contains generated build output, APKs, compiled classes, intermediates, and reports. It should not be treated as application source.
+Generated files under `app/build/` and `build/` are build outputs, not source files. `local.properties` contains machine-specific Android SDK configuration and should remain local.
 
----
+## Build and verify
 
-## Main application files
+From the repository root on Windows:
 
-### `MainActivity.java`
-
-This is currently the main application controller and UI implementation.
-
-It is responsible for:
-
-- Creating the entire UI programmatically
-- Building the app header
-- Building the bottom navigation bar
-- Showing the Focus home screen
-- Showing the focus setup screen
-- Showing the active timer screen
-- Showing the completion screen
-- Showing the pet collection screen
-- Showing the statistics screen
-- Showing the settings screen
-- Requesting notification permission
-- Registering the timer broadcast receiver
-- Starting and controlling `FocusService`
-- Updating the timer and progress bar
-- Handling session locking while focus is active
-
-Current screen flow:
-
-```text
-Home
- └── Focus setup
-      └── Active focus timer
-           ├── Completion screen
-           └── Home after cancellation
+```powershell
+.\gradlew.bat :app:assembleDebug
 ```
 
-The class currently contains most of the application logic, so it is doing the work of:
+Create a release APK with:
 
-- Activity
-- Navigation controller
-- UI renderer
-- Part of a ViewModel
-- Part of a repository
-- Session event handler
-
-This is workable for a prototype, but it is the largest structural issue in the current project.
-
----
-
-### `FocusService.java`
-
-This is the foreground service for active focus sessions.
-
-It handles:
-
-- Starting a focus timer
-- Running the timer in the background
-- Pause and resume
-- Cancelling a session
-- Sending timer tick broadcasts
-- Sending completion broadcasts
-- Showing the ongoing notification
-- Showing the completion notification
-- Saving and clearing active session state
-
-Important actions:
-
-```java
-ACTION_START
-ACTION_PAUSE
-ACTION_RESUME
-ACTION_CANCEL
-ACTION_TICK
-ACTION_COMPLETE
-ACTION_CANCELLED
+```powershell
+.\gradlew.bat :app:assembleRelease
 ```
 
-The service is responsible for preserving the timer while:
-
-- The app is backgrounded
-- The screen is locked
-- The user switches applications
-
-The current timer uses `SystemClock.elapsedRealtime()`, which is appropriate for elapsed-duration timing.
-
----
-
-### `FocusStore.java`
-
-This is the current local persistence class.
-
-It uses `SharedPreferences` to store:
-
-- Daily goal
-- Today’s focus minutes
-- Total focus minutes
-- Completed session count
-- Coins
-- Experience
-- Pet level
-- Current streak
-- Longest streak
-- Active session information
-
-Current responsibilities include:
-
-```text
-Reading progress
-Writing progress
-Saving active timer state
-Clearing active timer state
-Recording completed sessions
-Resetting local data
-```
-
-This is acting as a lightweight repository, although it is not formally named or structured as one.
-
----
-
-### `FirstFragment.java`
-
-This is an unused fragment from the original Android Studio template.
-
-It currently belongs to the old XML/Fragment navigation prototype and is not used by the current `MainActivity`.
-
----
-
-### `SecondFragment.java`
-
-This is also an unused Android Studio template fragment.
-
-It is not part of the current FocusPet UI flow.
-
----
-
-## Android manifest
-
-### `AndroidManifest.xml`
-
-Declares:
-
-- Main launcher activity
-- Foreground focus timer service
-- Notification permission
-- Foreground service permission
-- Special-use foreground service type
-
-Important declarations:
-
-```text
-MainActivity
-FocusService
-POST_NOTIFICATIONS
-FOREGROUND_SERVICE
-FOREGROUND_SERVICE_SPECIAL_USE
-```
-
-The special-use foreground service declaration is currently used for the focus timer.
-
----
-
-## Gradle and build files
-
-### `app/build.gradle.kts`
-
-Defines:
-
-- Android application module
-- Application ID
-- Minimum SDK: API 33
-- Target SDK: API 37
-- Compile SDK: API 37
-- Java 11 compatibility
-- Debug/release configuration
-- Dependencies
-- View Binding
-
-Current dependencies include:
-
-- AppCompat
-- Material
-- ConstraintLayout
-- AndroidX Activity
-- Navigation Fragment
-- Navigation UI
-- JUnit
-- Espresso
-
-Some of these dependencies are no longer needed by the current implementation.
-
----
-
-### `libs.versions.toml`
-
-Centralizes:
-
-- Android Gradle Plugin version
-- AndroidX versions
-- Material version
-- Navigation versions
-- Test library versions
-
-It is the project’s dependency version catalog.
-
----
-
-### `settings.gradle.kts`
-
-Defines:
-
-- Project name: `FocusPet`
-- The `app` module
-- Google and Maven Central repositories
-- Gradle plugin management
-
----
-
-### `build.gradle.kts`
-
-Currently contains the top-level Android application plugin declaration.
-
----
-
-## Resources
-
-The `res/` directory still contains many files from the original Android Studio template.
-
-### Layout resources
-
-These are mostly obsolete now:
-
-```text
-activity_main.xml
-content_main.xml
-fragment_first.xml
-fragment_second.xml
-```
-
-The current application UI is built programmatically in `MainActivity.java`, so these layouts are not used by the current screen implementation.
-
-### Navigation resources
-
-```text
-navigation/nav_graph.xml
-```
-
-This belongs to the previous Fragment Navigation implementation and is not currently used by the active UI.
-
-### Values resources
-
-Important files include:
-
-- `themes.xml`
-- `strings.xml`
-- `colors.xml`
-- `dimens.xml`
-
-`strings.xml` still contains template strings such as:
-
-- `First Fragment`
-- `Second Fragment`
-- `Lorem ipsum`
-
-These should eventually be removed and replaced with real FocusPet resources.
-
-### Drawable and launcher resources
-
-The launcher resources are still the default generated Android Studio assets:
-
-```text
-ic_launcher_background.xml
-ic_launcher_foreground.xml
-ic_launcher.xml
-ic_launcher_round.xml
-```
-
-They should eventually be replaced with a real FocusPet icon.
-
----
-
-## Tests
-
-### `ExampleUnitTest.java`
-
-Currently only tests:
-
-```java
-2 + 2 == 4
-```
-
-This is a placeholder test and does not test application behavior.
-
-### `ExampleInstrumentedTest.java`
-
-Currently only verifies that the application package name is:
-
-```text
-com.example.focuspet
-```
-
-This is also a placeholder test.
-
----
-
-# Current architecture
-
-The current architecture is effectively:
-
-```text
-MainActivity
- ├── Builds UI
- ├── Handles navigation
- ├── Reads/writes FocusStore
- ├── Registers timer receiver
- ├── Starts FocusService
- └── Updates progress and rewards
-
-FocusService
- ├── Runs timer
- ├── Sends broadcasts
- └── Shows notifications
-
-FocusStore
- └── SharedPreferences persistence
-```
-
-It is currently closer to a prototype architecture than the original requested MVVM architecture.
-
-The planned architecture was:
-
-```text
-Screen
-  ↓
-ViewModel
-  ↓
-Use case / Repository
-  ↓
-Room / DataStore
-```
-
-The project currently does not yet have:
-
-- ViewModels
-- Repository interfaces
-- Use-case classes
-- Room database
-- DataStore
-- Navigation Compose
-- Jetpack Compose
-- Session history entities
-- Proper domain models
-
----
-
-# Most important improvements next
-
-## 1. Fix active-session recovery
-
-This is the highest-priority reliability issue.
-
-`FocusStore` saves:
-
-```text
-active_end_at
-active_minutes
-```
-
-However, when the service is recreated, `FocusService` does not currently restore its in-memory fields from those stored values.
-
-That means a process/service restart could leave the app believing a session is active while the service no longer has the correct timer state.
-
-Recommended improvement:
-
-```text
-On FocusService.onCreate or onStartCommand:
-- Read active_end_at from FocusStore
-- Calculate remaining time
-- Restore duration and end timestamp
-- Resume notification and tick updates
-```
-
----
-
-## 2. Move rewards into the service or repository
-
-Currently, rewards are granted from `MainActivity` after receiving `ACTION_COMPLETE`.
-
-That creates a reliability problem:
-
-- If the activity is destroyed when the timer completes, it may not receive the broadcast.
-- The completion notification may appear, but rewards may not be recorded.
-- Reopening the app could show an incomplete reward state.
-
-Better design:
-
-```text
-FocusService detects completion
-        ↓
-Repository records completed session exactly once
-        ↓
-Activity observes updated progress
-```
-
-Reward recording should not depend on the activity being open.
-
----
-
-## 3. Add a real focus-session history
-
-The current store only stores totals:
-
-```text
-total minutes
-session count
-current streak
-longest streak
-```
-
-It does not store individual sessions.
-
-A proper history model should store:
-
-```text
-FocusSession
-- id
-- startedAt
-- endedAt
-- plannedMinutes
-- actualMinutes
-- label
-- status
-- rewardGranted
-```
-
-This is needed for:
-
-- Daily history
-- Weekly charts
-- Most-used duration
-- Session labels
-- Accurate streak calculations
-- Reward deduplication
-
----
-
-## 4. Replace SharedPreferences with Room and DataStore
-
-The original product plan requested:
-
-- Room for structured data
-- DataStore for preferences
-
-Recommended split:
-
-### Room
-
-Use Room for:
-
-- Focus sessions
-- Pets
-- Pet experience
-- Achievements
-- Player progress
-- Reward records
-
-### DataStore
-
-Use DataStore for:
-
-- Daily goal
-- Default session duration
-- Notification preference
-- Sound preference
-- Vibration preference
-- Theme selection
-- Onboarding completion
-
-`FocusStore` can then be replaced with:
-
-```text
-FocusRepository
-```
-
----
-
-## 5. Separate UI from application logic
-
-`MainActivity.java` is currently approximately 400+ lines and contains nearly all behavior.
-
-Recommended classes:
-
-```text
-ui/
-    MainActivity.java
-    HomeView.java
-    SetupView.java
-    ActiveFocusView.java
-    SettingsView.java
-
-viewmodel/
-    HomeViewModel.java
-    FocusSetupViewModel.java
-    ActiveFocusViewModel.java
-    SettingsViewModel.java
-
-data/
-    FocusRepository.java
-    FocusStore.java
-    FocusDatabase.java
-    FocusSessionDao.java
-
-domain/
-    RewardCalculator.java
-    StreakCalculator.java
-    FocusSession.java
-    Pet.java
-```
-
-Even if the project stays in Java and programmatic views, this separation will make it much easier to test and extend.
-
----
-
-## 6. Improve timer state modeling
-
-The timer currently uses several booleans and mutable fields:
-
-```text
-paused
-stopped
-workerGeneration
-remaining
-duration
-endAt
-```
-
-A clearer model would be:
-
-```java
-enum FocusState {
-    IDLE,
-    RUNNING,
-    PAUSED,
-    COMPLETED,
-    CANCELLED
-}
-```
-
-The service and UI should communicate a state object containing:
-
-```text
-state
-remainingMillis
-elapsedMillis
-durationMillis
-```
-
-This would simplify:
-
-- Pause/resume behavior
-- Screen restoration
-- Notification content
-- Progress rendering
-- Testing
-
----
-
-## 7. Implement calendar-aware streaks
-
-The current streak logic effectively increments to at least one:
-
-```java
-int nextStreak = Math.max(1, streak());
-```
-
-It does not yet correctly handle:
-
-- Consecutive calendar days
-- Missed days
-- Multiple sessions on one day
-- Yesterday versus older dates
-- Time zone changes
-- Daily progress reset
-
-A proper implementation should store:
-
-```text
-lastCompletedDate
-currentStreak
-longestStreak
-```
-
-Then compare the current local date with the last completed date.
-
----
-
-## 8. Add real tests
-
-The current tests are only templates.
-
-The next test suite should include:
-
-### Timer tests
-
-- Timer completes at the correct time
-- Pause preserves remaining duration
-- Resume continues from the paused value
-- Cancellation does not grant rewards
-- Service restoration works
-- Completion is recorded only once
-
-### Reward tests
-
-- XP is calculated correctly
-- Coins are calculated correctly
-- Cancelled sessions receive no full reward
-- Duplicate completion events do not duplicate rewards
-
-### Progress tests
-
-- Daily goal updates
-- Daily totals reset correctly
-- Streak increments correctly
-- Missed days reset correctly
-- Pet levels are calculated correctly
-
-### UI tests
-
-- Home screen displays progress
-- Setup accepts preset durations
-- Setup accepts custom duration
-- Timer screen hides navigation
-- End session returns to home
-- Settings reset works
-- Active bottom tab changes correctly
-
----
-
-## 9. Remove obsolete template code
-
-The following should be cleaned up once the current implementation is stable:
-
-- `FirstFragment.java`
-- `SecondFragment.java`
-- `activity_main.xml`
-- `content_main.xml`
-- `fragment_first.xml`
-- `fragment_second.xml`
-- `nav_graph.xml`
-- Template menu resources
-- Template strings
-- Unused Fragment Navigation dependencies
-- Unused ConstraintLayout dependency
-- Unused View Binding configuration
-
-This will reduce confusion and make the project easier to maintain.
-
----
-
-## 10. Improve the UI implementation
-
-The current UI is manually built with Java views. This is acceptable for a prototype, but it creates layout risks:
-
-- Manual spacing
-- Manual density calculations
-- Hard-coded colors
-- Hard-coded text
-- Difficult responsive behavior
-- More chance of overlapping content
-- Less reusable components
-
-The long-term options are:
-
-### Option A: Migrate to Jetpack Compose
-
-This matches the original product plan and would simplify:
-
-- State-driven UI
-- Navigation
-- Responsive layouts
-- Bottom navigation
-- Progress bars
-- Theming
-- Previewing screens
-
-### Option B: Stay with Java views temporarily
-
-If Java must remain the priority:
-
-- Move repeated styles into XML drawables
-- Use XML layouts rather than constructing every view manually
-- Create reusable custom view helpers
-- Use resource colors, dimensions, and strings
-- Use `ConstraintLayout` or `MaterialCardView`
-- Keep screen state outside the Activity
-
----
-
-# Recommended next milestone
-
-The best next implementation step is:
-
-```text
-Milestone: Reliable local focus sessions
-```
-
-It should include:
-
-1. Extract timer state into a testable class.
-2. Restore active sessions after service recreation.
-3. Record completion in the service/repository instead of the Activity.
-4. Prevent duplicate rewards.
-5. Add individual `FocusSession` records.
-6. Add timer and reward unit tests.
-7. Only then migrate persistence from SharedPreferences to Room/DataStore.
-
-After that, the project can safely expand into:
-
-```text
-Room history
-→ streak calculation
-→ pet progression
-→ achievements
-→ statistics charts
-→ onboarding
-→ visual pet assets
-```
+The debug build currently compiles successfully. The project includes JUnit and Espresso dependencies, but automated coverage is still limited; manual device testing remains important for timer, notification, and reward-flow behavior.
+
+## Reward and progression overview
+
+1. A focus session is created in Room when the timer starts.
+2. `FocusService` keeps the timer reliable in the background and sends completion or cancellation events.
+3. `FocusRepository` calculates rewards and stores them on the session as pending.
+4. The finish screen shows the result without applying it immediately.
+5. The user claims the reward once.
+6. `FocusStore` updates coins, Life Essence, Eggs, total focus time, sessions, and streak progress.
+7. Claimed XP is also added to the selected Room pet.
+8. A Pet Egg consumes one egg and 100 Life Essence, then creates a default pet. Appearance customization is reserved for a later feature.
+
+For an early ending, counted focus time is floored to whole minutes. Sessions shorter than one minute do not create a claimable early reward. Early rewards use approximately 30% of the normal numeric rewards, representing an approximate 70% loss.
+
+## Known limitations
+
+- `MainActivity` is still a large controller containing UI, navigation, and event logic.
+- `FocusStore` and Room divide progress data between two persistence systems.
+- Room currently uses `fallbackToDestructiveMigration()`, which can erase Room data after an incompatible schema change.
+- Several starter XML fragments and navigation dependencies come from the original Android Studio template and are not part of the current primary flow.
+- Pet artwork, animations, sound, vibration settings, and pet customization are placeholders or incomplete.
+- The reward economy and streak rules need more balancing and dedicated tests.
+- No account synchronization or cloud backup exists.
+
+## Next optimization steps (Possibly)
+
+1. Split `MainActivity` into screen components and ViewModels so UI rendering, navigation, and business logic are easier to test.
+2. Move all persistent progress into Room or define a clear synchronization boundary between Room and `FocusStore`.
+3. Replace destructive Room migration fallback with explicit migrations and backup/restore tests.
+4. Add unit tests for reward probabilities, early-session rounding, streak updates, hatching costs, and one-time claims.
+5. Add instrumentation tests for background timing, rotation/process recreation, notification actions, and locked finish/claim screens.
+6. Replace manual screen swapping with a consistent Navigation Component structure, or migrate deliberately to Compose rather than maintaining a mixed UI strategy.
+7. Add real pet assets, accessibility content descriptions, responsive layouts, and visual regression checks for different screen sizes.
+8. Profile startup and database calls, remove unused template dependencies, and close repository executors with lifecycle-safe ownership.
+9. Balance the economy using observed session data while ensuring rewards encourage healthy, bounded focus rather than excessive screen time.
