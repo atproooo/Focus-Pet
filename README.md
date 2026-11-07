@@ -148,8 +148,10 @@ For an early ending, counted focus time is floored to whole minutes. Sessions sh
 2. Better user setting interface. Allow editing daily focusing goals.
 3. Goal setting & focus session naming system. Need a data structure to store information of every focus session. The goal system might be complicated.
 4. Shop for some game items. Need to be carefully designed.
-5. Game art and possibly sound effects.
-6. To be added...
+5. Better focus history display. The main screen should only show some recent records. Add a 'more..' card to click into for details.
+6. Fonts and format should be adjusted for better visual, and the text hints in the whole app should be manually edited to get rid of unpleasant AI feels.
+7. Game art and possibly sound effects.
+8. To be added...
 
 ### Optional
 

@@ -144,7 +144,7 @@ public final class FocusRepository {
             starter.rarity = "Common";
             starter.imageKey = "pet_fox";
             starter.appearanceData = "default_fox";
-            starter.description = "A calm companion who grows with your focus.";
+            starter.description = "Why does it look like a mochi?";
             starter.hatchedAt = System.currentTimeMillis();
             starter.mood = 100;
             starter.energy = 100;
@@ -158,12 +158,12 @@ public final class FocusRepository {
         return run(() -> {
             Pet pet = new Pet();
             pet.templateId = "default_hatched";
-            pet.name = "New Companion";
-            pet.species = "Companion";
+            pet.name = "Freshman";
+            pet.species = "Cat";
             pet.rarity = "Common";
             pet.imageKey = "pet_default";
             pet.appearanceData = "default";
-            pet.description = "A newly hatched companion waiting to grow.";
+            pet.description = "A newly hatched pet waiting to grow.";
             pet.hatchedAt = System.currentTimeMillis();
             pet.mood = 100;
             pet.energy = 100;

@@ -109,7 +109,7 @@ public class MainActivity extends AppCompatActivity {
         navigation = new LinearLayout(this);
         navigation.setGravity(Gravity.CENTER);
         navigation.setBackgroundColor(Color.rgb(248, 241, 250));
-        addNavigationButton(navigation, "🎯", "Focus", v -> showHome());
+        addNavigationButton(navigation, "🏠", "Focus", v -> showHome());
         addNavigationButton(navigation, "🐾", "Collection", v -> showCollection());
         addNavigationButton(navigation, "📊", "Statistics", v -> showStats());
         addNavigationButton(navigation, "⚙️", "Settings", v -> showSettings());
@@ -387,8 +387,6 @@ public class MainActivity extends AppCompatActivity {
             presets.addView(preset, presetParams);
         }
         content.addView(presets);
-        content.addView(text("Put distractions aside. Your pet will be waiting\nwhen you finish.",
-                18, Color.rgb(35, 29, 38)));
         content.addView(button("Begin session", v -> {
             String custom = customDuration.getText().toString().trim();
             int selectedMinutes;
