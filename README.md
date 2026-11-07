@@ -140,7 +140,18 @@ For an early ending, counted focus time is floored to whole minutes. Sessions sh
 - The reward economy and streak rules need more balancing and dedicated tests.
 - No account synchronization or cloud backup exists.
 
-## Next optimization steps (Possibly)
+## What to do next (Possibly)
+
+### Must
+
+1. Add a pet customize system, letting users choose the appearance of their new pets from a sequence of choices. Better do it with artistic resources.
+2. Better user setting interface. Allow editing daily focusing goals.
+3. Goal setting & focus session naming system. Need a data structure to store information of every focus session. The goal system might be complicated.
+4. Shop for some game items. Need to be carefully designed.
+5. Game art and possibly sound effects.
+6. To be added...
+
+### Optional
 
 1. Split `MainActivity` into screen components and ViewModels so UI rendering, navigation, and business logic are easier to test.
 2. Move all persistent progress into Room or define a clear synchronization boundary between Room and `FocusStore`.
