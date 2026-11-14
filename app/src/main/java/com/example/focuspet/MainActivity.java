@@ -787,17 +787,96 @@ public class MainActivity extends AppCompatActivity {
         reset("Settings");
         setActiveTab(3);
         content.setPadding(dp(16), dp(24), dp(16), dp(24));
+
+        int sectionColor = Color.rgb(120, 112, 128);
+        int danger = Color.rgb(198, 40, 40);
+        int dangerDark = Color.rgb(150, 24, 24);
+        java.util.function.Supplier<View> divider = () -> {
+            View line = new View(this);
+            line.setBackgroundColor(Color.LTGRAY);
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, dp(1));
+            params.setMargins(0, dp(8), 0, dp(16));
+            line.setLayoutParams(params);
+            return line;
+        };
+
+        TextView focusGoalsHeader = text("Focus Goals", 13, sectionColor);
+        focusGoalsHeader.setTypeface(null, Typeface.BOLD);
+        focusGoalsHeader.setPadding(0, 0, 0, dp(8));
+        content.addView(focusGoalsHeader);
+        content.addView(divider.get());
+
         TextView goalTitle = text("Daily goal", 18, Color.rgb(35, 29, 38));
         goalTitle.setTypeface(null, Typeface.BOLD);
         goalTitle.setPadding(0, 0, 0, dp(2));
         content.addView(goalTitle);
-        TextView goalValue = text(store.dailyGoal() + " minutes", 18, Color.rgb(45, 39, 50));
-        goalValue.setPadding(0, 0, 0, dp(28));
-        content.addView(goalValue);
+        EditText goalInput = new EditText(this);
+        goalInput.setText(String.valueOf(store.dailyGoal()));
+        goalInput.setInputType(InputType.TYPE_CLASS_NUMBER);
+        goalInput.setTextSize(18);
+        goalInput.setSingleLine(true);
+        goalInput.setGravity(Gravity.CENTER_VERTICAL);
+        goalInput.setPadding(dp(16), 0, dp(16), 0);
+        goalInput.setBackground(outline(Color.rgb(110, 102, 115), 1, 8));
+        LinearLayout.LayoutParams goalInputParams = new LinearLayout.LayoutParams(-1, dp(72));
+        goalInputParams.setMargins(0, dp(4), 0, dp(12));
+        content.addView(goalInput, goalInputParams);
+
+        TextView goalHint = text("Your current goal is " + store.dailyGoal() + " minutes",
+                14, sectionColor);
+        goalHint.setPadding(dp(2), 0, 0, dp(14));
+        content.addView(goalHint);
+
+        content.addView(button("Save goal", v -> {
+            String value = goalInput.getText().toString().trim();
+            int parsed;
+            try {
+                parsed = Integer.parseInt(value);
+            } catch (NumberFormatException error) {
+                android.widget.Toast.makeText(this, "Enter a valid whole number of minutes.",
+                        android.widget.Toast.LENGTH_SHORT).show();
+                return;
+            }
+            if (parsed < 15 || parsed > 240) {
+                android.widget.Toast.makeText(this, "Daily goal must be between 15 and 240 minutes.",
+                        android.widget.Toast.LENGTH_SHORT).show();
+                return;
+            }
+            store.setDailyGoal(parsed);
+            android.widget.Toast.makeText(this, "Daily goal saved.",
+                    android.widget.Toast.LENGTH_SHORT).show();
+            showSettings();
+        }));
+
+        content.addView(divider.get());
+
+        TextView preferencesHeader = text("App Preferences", 13, sectionColor);
+        preferencesHeader.setTypeface(null, Typeface.BOLD);
+        preferencesHeader.setPadding(0, 0, 0, dp(8));
+        content.addView(preferencesHeader);
+        content.addView(divider.get());
+
         Button resetButton = outlineButton("Reset local progress", v -> showResetConfirmation());
+        resetButton.setTextColor(danger);
+        resetButton.setBackground(statefulOutline(danger, dangerDark, 28));
         content.addView(resetButton, new LinearLayout.LayoutParams(-1, dp(52)));
-        content.addView(text("Focus Grove works offline. Your progress stays\non this device.",
-                18, Color.rgb(45, 39, 50)));
+
+        content.addView(divider.get());
+
+        TextView aboutHeader = text("About", 13, sectionColor);
+        aboutHeader.setTypeface(null, Typeface.BOLD);
+        aboutHeader.setPadding(0, 0, 0, dp(8));
+        content.addView(aboutHeader);
+        content.addView(divider.get());
+
+        TextView appName = text("FocusPet", 20, Color.rgb(35, 29, 38));
+        appName.setTypeface(null, Typeface.BOLD);
+        content.addView(appName);
+        content.addView(text("Version " + BuildConfig.VERSION_NAME, 14, sectionColor));
+        content.addView(text("A focus timer with a companion that grows alongside you. "
+                + "All of your progress is stored privately on this device — "
+                + "no account, no ads, and no network connection required.",
+                14, Color.rgb(75, 67, 80)));
     }
 
     private void showResetConfirmation() {
@@ -805,7 +884,7 @@ public class MainActivity extends AppCompatActivity {
                 .setTitle("Reset local progress?")
                 .setMessage("This will permanently erase your focus history, rewards, pets, and streak progress from this device.")
                 .setNegativeButton("Cancel", null)
-                .setPositiveButton("Reset progress", (dialog, which) -> {
+                .setPositiveButton("Yes, reset everything", (dialog, which) -> {
                     store.reset();
                     showSettings();
                 })
