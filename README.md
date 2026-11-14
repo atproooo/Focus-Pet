@@ -164,3 +164,14 @@ For an early ending, counted focus time is floored to whole minutes. Sessions sh
 7. Add real pet assets, accessibility content descriptions, responsive layouts, and visual regression checks for different screen sizes.
 8. Profile startup and database calls, remove unused template dependencies, and close repository executors with lifecycle-safe ownership.
 9. Balance the economy using observed session data while ensuring rewards encourage healthy, bounded focus rather than excessive screen time.
+
+## Data model design update (2026-11-14)
+
+The standalone Java 11 prototype in [`FocusPetModels.java`](data-model/src/main/java/com/example/focuspet/model/FocusPetModels.java) describes data structures for the planned features. It is not connected to the Android app or its database.
+
+- **Goals and sessions:** named goals have a target duration and an extensible period; a session can optionally reference a goal and retain its own label. User settings include a daily focus target. Recent and complete history can be built from the session records.
+- **Pet customization:** cosmetic items represent additions such as clothing and decorations, separate from a pet's base appearance. Item categories and equipment slots use extensible keys. Ownership and each pet's equipped items are modeled separately; the exact categories, assets, and sharing rules remain to be decided.
+- **Shop and inventory:** products, currency balances, stackable inventory, and purchase snapshots have separate models. Cosmetic products use Coins; Pet Egg products use Life Essence. The model validates these currency assignments, but does not prescribe products or prices.
+- **Persistence and safety:** existing pets, sessions, balances, and eggs should be preserved during any future migration. A future implementation should make purchases atomic and idempotent, including the balance deduction, item grant, and purchase record. It should define a single source of truth for progress currently split between Room and `SharedPreferences`.
+
+These are data structures and basic field validations only. Room entities and migrations, purchase transactions, goal and history screens, customization UI, and artwork have not yet been implemented. The existing app still uses its current reward and hatching rules; whether to change random egg rewards or the Essence cost of hatching remains undecided.
