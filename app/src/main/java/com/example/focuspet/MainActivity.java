@@ -65,12 +65,15 @@ public class MainActivity extends AppCompatActivity {
         if (store.hasActiveSession()) {
             ContextCompat.startForegroundService(this,
                     new Intent(this, FocusService.class).setAction(FocusService.ACTION_RESTORE));
-            showActive(store.activeMinutes());
-        } else if (repository.latestPending() != null) {
-            FocusSession pending = repository.latestPending();
-            showFinish(pending.id, pending.actualMinutes, pending.endedEarly);
+            FocusSession active = repository.pendingSession(store.activeSessionId());
+            showActive(store.activeMinutes(), active == null ? "" : active.label);
         } else {
-            showHome();
+            FocusSession pending = repository.latestPending();
+            if (pending != null) {
+                showFinish(pending.id, pending.actualMinutes, pending.endedEarly);
+            } else {
+                showHome();
+            }
         }
     }
 
@@ -323,10 +326,51 @@ public class MainActivity extends AppCompatActivity {
         today.setPadding(dp(0), dp(24), dp(0), dp(0));
         content.addView(today);
         content.addView(text(store.todayMinutes() + " min focused", 28, Color.rgb(35, 29, 38)));
-        Pet selectedPet = repository.selectedPet();
+
+        int todayMinutes = store.todayMinutes();
+        int goal = store.dailyGoal();
+        int remaining = Math.max(0, goal - todayMinutes);
+        ProgressBar goalProgress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
+        goalProgress.setMax(goal);
+        goalProgress.setProgress(Math.min(todayMinutes, goal));
+        goalProgress.setProgressTintList(android.content.res.ColorStateList.valueOf(PURPLE));
+        goalProgress.setProgressBackgroundTintList(android.content.res.ColorStateList.valueOf(LAVENDER));
+        LinearLayout.LayoutParams goalProgressParams = new LinearLayout.LayoutParams(-1, dp(12));
+        goalProgressParams.setMargins(0, dp(8), 0, dp(4));
+        content.addView(goalProgress, goalProgressParams);
+        content.addView(text(remaining == 0
+                ? "Daily goal reached — nice work today!"
+                : remaining + " min to reach your " + goal + "-min daily goal",
+                14, Color.rgb(75, 67, 80)));
+
         content.addView(text(store.sessions() + " sessions completed.  Keep showing up!",
                 16, Color.rgb(45, 39, 50)));
         content.addView(button("Start focus", v -> showSetup()));
+
+        TextView recentTitle = text("Recent sessions", 16, PURPLE);
+        recentTitle.setTypeface(null, Typeface.BOLD);
+        recentTitle.setPadding(0, dp(24), 0, dp(8));
+        content.addView(recentTitle);
+
+        List<FocusSession> recent = repository.recentHistory(3);
+        if (recent.isEmpty()) {
+            content.addView(text("No sessions yet. Your recent focus sessions will appear here.",
+                    16, Color.DKGRAY));
+        } else {
+            for (FocusSession session : recent) {
+                addHistoryRow(content, session);
+            }
+        }
+
+        TextView moreCard = text("More...", 15, PURPLE_DARK);
+        moreCard.setBackgroundResource(R.drawable.bg_focuspet_card);
+        moreCard.setGravity(Gravity.CENTER);
+        moreCard.setTypeface(null, Typeface.BOLD);
+        moreCard.setPadding(dp(12), dp(14), dp(12), dp(14));
+        LinearLayout.LayoutParams moreParams = new LinearLayout.LayoutParams(-1, -2);
+        moreParams.setMargins(0, dp(12), 0, dp(8));
+        moreCard.setOnClickListener(v -> showStats());
+        content.addView(moreCard, moreParams);
     }
 
     private View companionCard() {
@@ -355,6 +399,28 @@ public class MainActivity extends AppCompatActivity {
         back.setPadding(0, dp(8), 0, dp(18));
         back.setOnClickListener(v -> showHome());
         content.addView(back);
+
+        TextView nameLabel = text("What are you focusing on? (optional)", 14, Color.rgb(75, 67, 80));
+        nameLabel.setPadding(0, 0, 0, dp(4));
+        content.addView(nameLabel);
+
+        EditText sessionNameInput = new EditText(this);
+        sessionNameInput.setHint("e.g. math homework");
+        sessionNameInput.setInputType(InputType.TYPE_CLASS_TEXT);
+        sessionNameInput.setTextSize(18);
+        sessionNameInput.setSingleLine(true);
+        sessionNameInput.setGravity(Gravity.CENTER_VERTICAL);
+        sessionNameInput.setPadding(dp(16), 0, dp(16), 0);
+        sessionNameInput.setBackground(outline(Color.rgb(110, 102, 115), 1, 8));
+        sessionNameInput.setFilters(new android.text.InputFilter[] {
+                new android.text.InputFilter.LengthFilter(60) });
+        LinearLayout.LayoutParams nameParams = new LinearLayout.LayoutParams(-1, dp(72));
+        nameParams.setMargins(0, 0, 0, dp(4));
+        content.addView(sessionNameInput, nameParams);
+        TextView nameHint = text("Leave blank and we'll call it a Focus session.", 14, Color.DKGRAY);
+        nameHint.setPadding(dp(16), dp(2), dp(16), dp(12));
+        content.addView(nameHint, new LinearLayout.LayoutParams(-1, -2));
+
         content.addView(text("How long would you like to focus?", 19, Color.rgb(35, 29, 38)));
 
         TextView customLabel = text("Custom focus time (minutes)", 14, Color.rgb(75, 67, 80));
@@ -372,7 +438,7 @@ public class MainActivity extends AppCompatActivity {
         LinearLayout.LayoutParams inputParams = new LinearLayout.LayoutParams(-1, dp(72));
         inputParams.setMargins(0, 0, 0, dp(4));
         content.addView(customDuration, inputParams);
-        TextView hint = text("Choose any whole number from 1 to 180 minutes.", 14, Color.DKGRAY);
+        TextView hint = text("Choose any whole number from 1 to 240 minutes.", 14, Color.DKGRAY);
         hint.setPadding(dp(16), dp(2), dp(16), dp(12));
         content.addView(hint, new LinearLayout.LayoutParams(-1, -2));
 
@@ -402,7 +468,7 @@ public class MainActivity extends AppCompatActivity {
                         android.widget.Toast.LENGTH_SHORT).show();
                 return;
             }
-            startFocus(selectedMinutes, "");
+            startFocus(selectedMinutes, sessionNameInput.getText().toString().trim());
         }));
     }
 
@@ -410,16 +476,29 @@ public class MainActivity extends AppCompatActivity {
         Intent intent = new Intent(this, FocusService.class).setAction(FocusService.ACTION_START)
                 .putExtra(FocusService.EXTRA_MINUTES, minutes).putExtra(FocusService.EXTRA_LABEL, label);
         ContextCompat.startForegroundService(this, intent);
-        showActive(minutes);
+        showActive(minutes, label);
     }
 
-    private void showActive(int sessionMinutes) {
+    private void showActive(int sessionMinutes, String label) {
         reset("Focus in progress");
         setSessionLock(true);
         setActiveTab(0);
+        boolean hasName = label != null && !label.trim().isEmpty();
+        String displayName = displayLabel(label);
+        if (hasName) {
+            TextView nameCaption = text("FOCUSING ON", 13, PURPLE);
+            nameCaption.setTypeface(null, Typeface.BOLD);
+            nameCaption.setGravity(Gravity.CENTER);
+            nameCaption.setPadding(0, dp(24), 0, dp(4));
+            content.addView(nameCaption);
+            TextView nameValue = text(displayName, 22, PURPLE_DARK);
+            nameValue.setTypeface(null, Typeface.BOLD);
+            nameValue.setGravity(Gravity.CENTER);
+            content.addView(nameValue);
+        }
         TextView timer = text("Loading...", 64, Color.rgb(35, 29, 38));
         timer.setGravity(Gravity.CENTER);
-        timer.setPadding(0, dp(64), 0, dp(18));
+        timer.setPadding(0, hasName ? dp(24) : dp(64), 0, dp(18));
         content.addView(timer);
         ProgressBar progress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
         final long totalMillis = Math.max(1L, sessionMinutes * 60_000L);
@@ -493,15 +572,26 @@ public class MainActivity extends AppCompatActivity {
         return String.format(Locale.US, "%02d:%02d", seconds / 60, seconds % 60);
     }
 
+    private String displayLabel(String label) {
+        return label == null || label.trim().isEmpty() ? "Focus session" : label;
+    }
+
     private void showFinish(long sessionId, int minutes, boolean endedEarly) {
         if (timerReceiver != null) {
             unregisterReceiver(timerReceiver);
             timerReceiver = null;
         }
+        FocusSession finished = repository.pendingSession(sessionId);
         reset("Session complete!");
         setSessionLock(true);
         setActiveTab(0);
         content.addView(imagePlaceholder("SESSION CELEBRATION"));
+        TextView finishName = text(displayLabel(finished == null ? "" : finished.label),
+                22, PURPLE_DARK);
+        finishName.setTypeface(null, Typeface.BOLD);
+        finishName.setGravity(Gravity.CENTER);
+        finishName.setPadding(0, dp(8), 0, dp(8));
+        content.addView(finishName);
         content.addView(text("🌟 Great work, your pet is proud.", 24, Color.rgb(74, 55, 95)));
         content.addView(text(minutes + " minutes focused\n"
                 + (endedEarly ? "Partial rewards are ready to claim." : "Your rewards are ready to claim."),
@@ -519,6 +609,11 @@ public class MainActivity extends AppCompatActivity {
         setSessionLock(true);
         setActiveTab(0);
         content.addView(imagePlaceholder("REWARD ANIMATION"));
+        TextView claimName = text(displayLabel(session.label), 22, PURPLE_DARK);
+        claimName.setTypeface(null, Typeface.BOLD);
+        claimName.setGravity(Gravity.CENTER);
+        claimName.setPadding(0, dp(8), 0, dp(8));
+        content.addView(claimName);
         content.addView(text("Your session rewards", 24, Color.rgb(74, 55, 95)));
         content.addView(text("⭐ +" + session.xpReward + " XP\n"
                 + "🪙 +" + session.coinReward + " coins\n"
@@ -723,16 +818,23 @@ public class MainActivity extends AppCompatActivity {
 
     private void addHistoryRow(LinearLayout parent, FocusSession session) {
         View row = LayoutInflater.from(this).inflate(R.layout.item_session_history, parent, false);
-        String label = session.label == null || session.label.trim().isEmpty()
-                ? "Focus session" : session.label;
+        String label = displayLabel(session.label);
+        if (label.length() > 20) {
+            label = label.substring(0, 20) + "...";
+        }
         String status = session.endedEarly ? "Ended early"
                 : FocusSession.STATUS_CLAIMED.equals(session.status) ? "Completed"
                 : FocusSession.STATUS_CANCELLED.equals(session.status) ? "Ended early"
                 : "Reward pending";
-        ((TextView) row.findViewById(R.id.history_label)).setText(label + "  •  " + status);
+        TextView labelView = row.findViewById(R.id.history_label);
+        labelView.setMaxLines(1);
+        labelView.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        labelView.setText(label + "  •  " + status);
         String date = new SimpleDateFormat("MMM d, yyyy  h:mm a", Locale.US)
                 .format(new Date(session.startedAt));
-        ((TextView) row.findViewById(R.id.history_date)).setText(date);
+        TextView dateView = row.findViewById(R.id.history_date);
+        dateView.setMaxLines(1);
+        dateView.setText(date);
         ((TextView) row.findViewById(R.id.history_duration))
                 .setText(session.actualMinutes + " min");
         row.setOnClickListener(v -> showHistoryDetail(session));
@@ -747,8 +849,7 @@ public class MainActivity extends AppCompatActivity {
         content.addView(screen);
         screen.findViewById(R.id.history_detail_back).setOnClickListener(v -> showStats());
 
-        String label = session.label == null || session.label.trim().isEmpty()
-                ? "Focus session" : session.label;
+        String label = displayLabel(session.label);
         String status = session.endedEarly ? "Ended early"
                 : FocusSession.STATUS_CLAIMED.equals(session.status) ? "Completed"
                 : FocusSession.STATUS_CANCELLED.equals(session.status) ? "Ended early"

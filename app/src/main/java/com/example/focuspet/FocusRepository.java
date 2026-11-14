@@ -121,6 +121,10 @@ public final class FocusRepository {
         return run(sessions::history);
     }
 
+    public List<FocusSession> recentHistory(int limit) {
+        return run(() -> sessions.recentHistory(limit));
+    }
+
     public FocusSession latestPending() {
         return run(sessions::latestPending);
     }
