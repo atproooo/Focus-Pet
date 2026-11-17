@@ -28,6 +28,16 @@ public final class FocusRepository {
         }
     }
 
+    /** Erases all persisted sessions, pets, and preferences in one serialized operation. */
+    public void clearAllData() {
+        run(() -> {
+            sessions.deleteAll();
+            pets.deleteAll();
+            progress.reset();
+            return null;
+        });
+    }
+
     public long startSession(int plannedMinutes, String label) {
         try {
             Future<Long> result = databaseExecutor.submit(() -> {

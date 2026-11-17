@@ -11,6 +11,9 @@ public interface FocusSessionDao {
     @Insert
     long insert(FocusSession session);
 
+    @Query("DELETE FROM focus_sessions")
+    void deleteAll();
+
     @Query("SELECT * FROM focus_sessions WHERE id = :id LIMIT 1")
     FocusSession findById(long id);
 

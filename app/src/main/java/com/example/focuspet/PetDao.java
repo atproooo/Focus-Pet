@@ -11,6 +11,9 @@ public interface PetDao {
     @Insert
     long insert(Pet pet);
 
+    @Query("DELETE FROM pets")
+    void deleteAll();
+
     @Query("SELECT * FROM pets ORDER BY id ASC")
     List<Pet> all();
 

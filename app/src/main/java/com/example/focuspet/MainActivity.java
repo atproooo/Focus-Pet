@@ -19,15 +19,14 @@ import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.FrameLayout;
-import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.ScrollView;
-import android.widget.Spinner;
 import android.widget.TextView;
 
+import androidx.activity.OnBackPressedCallback;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
 import androidx.core.view.ViewCompat;
@@ -73,6 +72,25 @@ public class MainActivity extends AppCompatActivity {
         store = new FocusStore(this);
         repository = new FocusRepository(this);
         repository.ensureStarterPet();
+        getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
+            @Override public void handleOnBackPressed() {
+                if (store != null && store.hasActiveSession()) {
+                    android.widget.Toast.makeText(MainActivity.this,
+                            "Finish or end the current focus session first.",
+                            android.widget.Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                if (repository != null && repository.latestPending() != null) {
+                    android.widget.Toast.makeText(MainActivity.this,
+                            "Claim the pending reward first.",
+                            android.widget.Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                setEnabled(false);
+                getOnBackPressedDispatcher().onBackPressed();
+                setEnabled(true);
+            }
+        });
         buildShell();
         requestNotifications();
         if (store.hasActiveSession()) {
@@ -206,20 +224,6 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    @Override public void onBackPressed() {
-        if (store != null && store.hasActiveSession()) {
-            android.widget.Toast.makeText(this, "Finish or end the current focus session first.",
-                    android.widget.Toast.LENGTH_SHORT).show();
-            return;
-        }
-        if (repository != null && repository.latestPending() != null) {
-            android.widget.Toast.makeText(this, "Claim the pending reward first.",
-                    android.widget.Toast.LENGTH_SHORT).show();
-            return;
-        }
-        super.onBackPressed();
-    }
-
     private void addNavigationButton(LinearLayout navigation, String icon, String label,
                                      View.OnClickListener listener) {
         LinearLayout item = new LinearLayout(this);
@@ -336,7 +340,7 @@ public class MainActivity extends AppCompatActivity {
         View companion = companionCard();
         companion.setOnClickListener(v -> showCompanionChooser());
         content.addView(companion);
-        TextView today = text("Today", 16, PURPLE);
+        TextView today = text("Today", 20, PURPLE_DARK);
         today.setTypeface(null, Typeface.BOLD);
         today.setPadding(dp(0), dp(24), dp(0), dp(0));
         content.addView(today);
@@ -362,7 +366,7 @@ public class MainActivity extends AppCompatActivity {
                 16, Color.rgb(45, 39, 50)));
         content.addView(button("Start focus", v -> showSetup()));
 
-        TextView recentTitle = text("Recent sessions", 16, PURPLE);
+        TextView recentTitle = text("Recent Sessions", 20, PURPLE_DARK);
         recentTitle.setTypeface(null, Typeface.BOLD);
         recentTitle.setPadding(0, dp(24), 0, dp(8));
         content.addView(recentTitle);
@@ -571,9 +575,18 @@ public class MainActivity extends AppCompatActivity {
     private void showEndSessionConfirmation() {
         new AlertDialog.Builder(this)
                 .setTitle("End focus session?")
-                .setMessage("You can still claim rewards for the time you focused, but ending early may reduce XP, coins, Life Essence, and Pet Egg chances by 70%.")
+                .setMessage("You can still claim rewards for the time you focused, but ending early may reduce XP, coins, Life Essence, Pet Egg chances, and the minutes credited toward your daily goal, by 70%.")
                 .setNegativeButton("No", null)
-                .setPositiveButton("Yes, end session", (dialog, which) ->
+                .setPositiveButton("Yes, end session", (dialog, which) -> showFinalEndWarning())
+                .show();
+    }
+
+    private void showFinalEndWarning() {
+        new AlertDialog.Builder(this)
+                .setTitle("Really end your session early?")
+                .setMessage("Sessions under 4 focused minutes may count as 0 minutes toward your goal. This cannot be undone — do you still want to end now?")
+                .setNegativeButton("No, keep focusing", null)
+                .setPositiveButton("Yes, end anyway", (dialog, which) ->
                         sendService(FocusService.ACTION_CANCEL))
                 .show();
     }
@@ -654,7 +667,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void showCollection() {
-        reset("Pet collection");
+        reset("Pet Collection");
         setActiveTab(1);
         LinearLayout screen = (LinearLayout) LayoutInflater.from(this)
                 .inflate(R.layout.screen_collection, content, false);
@@ -792,7 +805,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void showStats() {
-        reset("Focus statistics");
+        reset("Focus Statistics");
         setActiveTab(2);
         LinearLayout screen = (LinearLayout) LayoutInflater.from(this)
                 .inflate(R.layout.screen_statistics, content, false);
@@ -900,27 +913,18 @@ public class MainActivity extends AppCompatActivity {
     private void showSettings() {
         reset("Settings");
         setActiveTab(3);
-        content.setPadding(dp(16), dp(24), dp(16), dp(24));
+        content.setPadding(dp(20), dp(8), dp(20), dp(100));
 
         int sectionColor = Color.rgb(120, 112, 128);
         int danger = Color.rgb(198, 40, 40);
         int dangerDark = Color.rgb(150, 24, 24);
-        java.util.function.Supplier<View> divider = () -> {
-            View line = new View(this);
-            line.setBackgroundColor(Color.LTGRAY);
-            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, dp(1));
-            params.setMargins(0, dp(8), 0, dp(16));
-            line.setLayoutParams(params);
-            return line;
-        };
 
-        TextView focusGoalsHeader = text("Focus Goals", 13, sectionColor);
+        TextView focusGoalsHeader = text("Focus Goals", 20, PURPLE_DARK);
         focusGoalsHeader.setTypeface(null, Typeface.BOLD);
         focusGoalsHeader.setPadding(0, 0, 0, dp(8));
         content.addView(focusGoalsHeader);
-        content.addView(divider.get());
 
-        TextView goalTitle = text("Daily goal", 18, Color.rgb(35, 29, 38));
+        TextView goalTitle = text("Daily Goal", 14, Color.rgb(45, 39, 50));
         goalTitle.setTypeface(null, Typeface.BOLD);
         goalTitle.setPadding(0, 0, 0, dp(2));
         content.addView(goalTitle);
@@ -931,13 +935,13 @@ public class MainActivity extends AppCompatActivity {
         goalInput.setSingleLine(true);
         goalInput.setGravity(Gravity.CENTER_VERTICAL);
         goalInput.setPadding(dp(16), 0, dp(16), 0);
-        goalInput.setBackground(outline(Color.rgb(110, 102, 115), 1, 8));
-        LinearLayout.LayoutParams goalInputParams = new LinearLayout.LayoutParams(-1, dp(72));
+        goalInput.setBackground(roundColor(Color.rgb(245, 243, 248), 12));
+        LinearLayout.LayoutParams goalInputParams = new LinearLayout.LayoutParams(-1, dp(56));
         goalInputParams.setMargins(0, dp(4), 0, dp(12));
         content.addView(goalInput, goalInputParams);
 
         TextView goalHint = text("Your current goal is " + store.dailyGoal() + " minutes",
-                14, sectionColor);
+                13, sectionColor);
         goalHint.setPadding(dp(2), 0, 0, dp(14));
         content.addView(goalHint);
 
@@ -960,37 +964,35 @@ public class MainActivity extends AppCompatActivity {
             android.widget.Toast.makeText(this, "Daily goal saved.",
                     android.widget.Toast.LENGTH_SHORT).show();
             showSettings();
-        }));
+        }), new LinearLayout.LayoutParams(-1, dp(48)));
 
-        content.addView(divider.get());
-
-        TextView preferencesHeader = text("App Preferences", 13, sectionColor);
+        TextView preferencesHeader = text("App Preferences", 20, PURPLE_DARK);
         preferencesHeader.setTypeface(null, Typeface.BOLD);
         preferencesHeader.setPadding(0, 0, 0, dp(8));
-        content.addView(preferencesHeader);
-        content.addView(divider.get());
+        LinearLayout.LayoutParams prefsHeaderParams = new LinearLayout.LayoutParams(-1, -2);
+        prefsHeaderParams.setMargins(0, dp(32), 0, 0);
+        content.addView(preferencesHeader, prefsHeaderParams);
 
         Button resetButton = outlineButton("Reset local progress", v -> showResetConfirmation());
         resetButton.setTextColor(danger);
         resetButton.setBackground(statefulOutline(danger, dangerDark, 28));
         content.addView(resetButton, new LinearLayout.LayoutParams(-1, dp(52)));
 
-        content.addView(divider.get());
-
-        TextView aboutHeader = text("About", 13, sectionColor);
+        TextView aboutHeader = text("About", 20, PURPLE_DARK);
         aboutHeader.setTypeface(null, Typeface.BOLD);
         aboutHeader.setPadding(0, 0, 0, dp(8));
-        content.addView(aboutHeader);
-        content.addView(divider.get());
+        LinearLayout.LayoutParams aboutHeaderParams = new LinearLayout.LayoutParams(-1, -2);
+        aboutHeaderParams.setMargins(0, dp(32), 0, 0);
+        content.addView(aboutHeader, aboutHeaderParams);
 
         TextView appName = text("FocusPet", 20, Color.rgb(35, 29, 38));
         appName.setTypeface(null, Typeface.BOLD);
         content.addView(appName);
-        content.addView(text("Version " + BuildConfig.VERSION_NAME, 14, sectionColor));
+        content.addView(text("Version " + BuildConfig.VERSION_NAME, 13, sectionColor));
         content.addView(text("A focus timer with a companion that grows alongside you. "
                 + "All of your progress is stored privately on this device — "
                 + "no account, no ads, and no network connection required.",
-                14, Color.rgb(75, 67, 80)));
+                13, Color.rgb(75, 67, 80)));
     }
 
     private void showResetConfirmation() {
@@ -999,7 +1001,8 @@ public class MainActivity extends AppCompatActivity {
                 .setMessage("This will permanently erase your focus history, rewards, pets, and streak progress from this device.")
                 .setNegativeButton("Cancel", null)
                 .setPositiveButton("Yes, reset everything", (dialog, which) -> {
-                    store.reset();
+                    repository.clearAllData();
+                    repository.ensureStarterPet();
                     showSettings();
                 })
                 .show();
@@ -1015,7 +1018,7 @@ public class MainActivity extends AppCompatActivity {
     private void refreshCalendarScreen() {
         if (!LocalDate.now().equals(renderedDay)) {
             if ("Focus Grove".equals(currentScreen)) showHome();
-            else if ("Focus statistics".equals(currentScreen)) showStats();
+            else if ("Focus Statistics".equals(currentScreen)) showStats();
         }
     }
 
