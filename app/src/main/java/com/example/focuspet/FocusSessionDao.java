@@ -29,6 +29,9 @@ public interface FocusSessionDao {
     @Query("SELECT * FROM focus_sessions ORDER BY startedAt DESC")
     List<FocusSession> history();
 
+    @Query("SELECT * FROM focus_sessions WHERE status != 'RUNNING' ORDER BY startedAt DESC LIMIT :limit")
+    List<FocusSession> recentHistory(int limit);
+
     @Query("SELECT * FROM focus_sessions WHERE status = 'COMPLETED_UNCLAIMED' ORDER BY endedAt DESC LIMIT 1")
     FocusSession latestPending();
 }
