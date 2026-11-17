@@ -7,6 +7,8 @@ import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Intent;
 import android.os.IBinder;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.SystemClock;
 
 import androidx.annotation.Nullable;
@@ -29,10 +31,9 @@ public class FocusService extends Service {
     private long endAt;
     private long remaining;
     private long duration;
-    private volatile boolean paused;
-    private volatile boolean stopped;
-    private Thread worker;
-    private volatile int workerGeneration;
+    private boolean paused;
+    private boolean stopped;
+    private final Handler timerHandler = new Handler(Looper.getMainLooper());
     private FocusStore store;
     private FocusRepository repository;
     private long sessionId;
@@ -60,26 +61,29 @@ public class FocusService extends Service {
             store.setActiveSessionId(sessionId);
             store.saveActiveSession(endAt, (int) (duration / 60_000L));
             startForeground(21, notification());
-            startWorker();
+            startTimer();
         } else if (ACTION_START.equals(action) || ACTION_RESTORE.equals(action)
                 || action.isEmpty()) {
             restoreFromStore();
             if (store.hasActiveSession()) {
                 startForeground(21, notification());
-                if (!paused) startWorker();
+                if (!paused) startTimer();
             }
         } else if (ACTION_PAUSE.equals(action) && !paused) {
             remaining = Math.max(0, endAt - SystemClock.elapsedRealtime());
             paused = true;
-            workerGeneration++;
+            timerHandler.removeCallbacks(tick);
             store.saveActiveSessionState(endAt, (int) (duration / 60_000L), true, remaining);
             updateNotification();
         } else if (ACTION_RESUME.equals(action) && paused) {
             endAt = SystemClock.elapsedRealtime() + remaining;
             paused = false;
             store.saveActiveSessionState(endAt, (int) (duration / 60_000L), false, remaining);
-            startWorker();
+            startTimer();
         } else if (ACTION_CANCEL.equals(action)) {
+            stopped = true;
+            timerHandler.removeCallbacks(tick);
+            if (!paused) remaining = Math.max(0L, endAt - SystemClock.elapsedRealtime());
             long elapsedMillis = Math.max(0L, duration - remaining);
             int actualMinutes = (int) (elapsedMillis / 60_000L);
             long currentSessionId = sessionId > 0 ? sessionId : store.activeSessionId();
@@ -93,31 +97,34 @@ public class FocusService extends Service {
         return START_REDELIVER_INTENT;
     }
 
-    private void startWorker() {
-        if (worker != null && worker.isAlive()) return;
-        final int generation = ++workerGeneration;
-        worker = new Thread(() -> {
-            while (!paused && !stopped && generation == workerGeneration) {
-                remaining = Math.max(0, endAt - SystemClock.elapsedRealtime());
-                sendBroadcast(new Intent(ACTION_TICK).setPackage(getPackageName())
-                        .putExtra(EXTRA_REMAINING, remaining));
-                if (remaining == 0) {
-                    repository.completeSession(sessionId > 0 ? sessionId : store.activeSessionId(),
-                            (int) (duration / 60_000L));
-                    store.clearActiveSession();
-                    sendBroadcast(new Intent(ACTION_COMPLETE).setPackage(getPackageName())
-                            .putExtra(EXTRA_MINUTES, (int) (duration / 60_000L))
-                            .putExtra(EXTRA_SESSION_ID, sessionId));
-                    completionNotification();
-                    stopSelf();
-                    return;
-                }
-                updateNotification();
-                SystemClock.sleep(1000);
-            }
-        });
-        worker.start();
+    private void startTimer() {
+        timerHandler.removeCallbacks(tick);
+        timerHandler.post(tick);
     }
+
+    // Commands and ticks share the main looper: pause/resume cannot leave an orphan worker.
+    private final Runnable tick = new Runnable() {
+        @Override public void run() {
+            if (paused || stopped) return;
+            remaining = Math.max(0, endAt - SystemClock.elapsedRealtime());
+            sendBroadcast(new Intent(ACTION_TICK).setPackage(getPackageName())
+                    .putExtra(EXTRA_REMAINING, remaining));
+            if (remaining == 0) {
+                stopped = true;
+                repository.completeSession(sessionId > 0 ? sessionId : store.activeSessionId(),
+                        (int) (duration / 60_000L));
+                store.clearActiveSession();
+                sendBroadcast(new Intent(ACTION_COMPLETE).setPackage(getPackageName())
+                        .putExtra(EXTRA_MINUTES, (int) (duration / 60_000L))
+                        .putExtra(EXTRA_SESSION_ID, sessionId));
+                completionNotification();
+                stopSelf();
+                return;
+            }
+            updateNotification();
+            timerHandler.postDelayed(this, 1000);
+        }
+    };
 
     private void restoreFromStore() {
         if (!store.hasActiveSession()) return;
@@ -155,7 +162,7 @@ public class FocusService extends Service {
 
     @Override public void onDestroy() {
         stopped = true;
-        if (worker != null) worker.interrupt();
+        timerHandler.removeCallbacks(tick);
         super.onDestroy();
     }
 

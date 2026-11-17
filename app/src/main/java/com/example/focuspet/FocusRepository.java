@@ -8,7 +8,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
 /**
- * Owns session history and completion rewards. Methods are called from the service worker.
+ * Owns session history and completion rewards using a serialized database executor.
  */
 public final class FocusRepository {
     private final FocusSessionDao sessions;
@@ -20,6 +20,12 @@ public final class FocusRepository {
         sessions = FocusDatabase.getInstance(context).focusSessionDao();
         pets = FocusDatabase.getInstance(context).petDao();
         progress = new FocusStore(context);
+        if (progress.needsCalendarInitialization()) {
+            run(() -> {
+                progress.initializeCalendarProgress(sessions.claimedHistory());
+                return null;
+            });
+        }
     }
 
     public long startSession(int plannedMinutes, String label) {
@@ -45,6 +51,7 @@ public final class FocusRepository {
 
     public void completeEarlySession(long id, int actualMinutes) {
         if (actualMinutes > 0) completeSession(id, actualMinutes, true);
+        else cancelSession(id, 0);
     }
 
     private void completeSession(long id, int actualMinutes, boolean endedEarly) {
@@ -91,7 +98,7 @@ public final class FocusRepository {
             if (session == null || !FocusSession.STATUS_COMPLETED.equals(session.status)
                     || sessions.claim(id) != 1) return false;
             progress.addClaimedRewards(session.xpReward, session.coinReward,
-                    session.essenceReward, session.eggReward);
+                    session.essenceReward, session.eggReward, sessions.claimedHistory());
             Pet selected = pets.selected();
             if (selected != null && session.xpReward > 0) {
                 pets.addExperience(selected.id, session.xpReward);

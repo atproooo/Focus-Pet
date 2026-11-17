@@ -17,7 +17,7 @@ public interface FocusSessionDao {
     @Query("UPDATE focus_sessions SET status = :status, endedAt = :endedAt, actualMinutes = :actualMinutes, xpReward = :xp, coinReward = :coins, essenceReward = :essence, eggReward = :egg, endedEarly = :endedEarly WHERE id = :id")
     void finish(long id, String status, long endedAt, int actualMinutes, int xp, int coins, int essence, boolean egg, boolean endedEarly);
 
-    @Query("UPDATE focus_sessions SET status = :status, endedAt = :endedAt, actualMinutes = :actualMinutes, rewardGranted = 0 WHERE id = :id")
+    @Query("UPDATE focus_sessions SET status = :status, endedAt = :endedAt, actualMinutes = :actualMinutes, endedEarly = 1, rewardGranted = 0 WHERE id = :id AND status = 'RUNNING'")
     void cancel(long id, String status, long endedAt, int actualMinutes);
 
     @Query("UPDATE focus_sessions SET rewardGranted = 1 WHERE id = :id AND rewardGranted = 0")
@@ -28,6 +28,9 @@ public interface FocusSessionDao {
 
     @Query("SELECT * FROM focus_sessions ORDER BY startedAt DESC")
     List<FocusSession> history();
+
+    @Query("SELECT * FROM focus_sessions WHERE status = 'CLAIMED'")
+    List<FocusSession> claimedHistory();
 
     @Query("SELECT * FROM focus_sessions WHERE status != 'RUNNING' ORDER BY startedAt DESC LIMIT :limit")
     List<FocusSession> recentHistory(int limit);

@@ -11,6 +11,8 @@ import android.graphics.Typeface;
 import android.graphics.drawable.StateListDrawable;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.SystemClock;
 import android.text.InputType;
 import android.view.Gravity;
@@ -38,6 +40,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.time.LocalDate;
+import java.time.ZoneId;
 
 public class MainActivity extends AppCompatActivity {
     private static final int NOTIFICATION_REQUEST = 7;
@@ -53,6 +57,15 @@ public class MainActivity extends AppCompatActivity {
     private TextView title;
     private TextView debugButton;
     private BroadcastReceiver timerReceiver;
+    private String currentScreen;
+    private LocalDate renderedDay;
+    private final Handler calendarHandler = new Handler(Looper.getMainLooper());
+    private final Runnable calendarRefresh = new Runnable() {
+        @Override public void run() {
+            refreshCalendarScreen();
+            scheduleCalendarRefresh();
+        }
+    };
     private final List<LinearLayout> navigationItems = new ArrayList<>();
 
     @Override protected void onCreate(Bundle state) {
@@ -308,6 +321,8 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void reset(String screenTitle) {
+        currentScreen = screenTitle;
+        renderedDay = LocalDate.now();
         title.setText(screenTitle);
         content.removeAllViews();
         content.setPadding(dp(20), dp(8), dp(20), dp(32));
@@ -819,9 +834,7 @@ public class MainActivity extends AppCompatActivity {
     private void addHistoryRow(LinearLayout parent, FocusSession session) {
         View row = LayoutInflater.from(this).inflate(R.layout.item_session_history, parent, false);
         String label = displayLabel(session.label);
-        if (label.length() > 20) {
-            label = label.substring(0, 20) + "...";
-        }
+        label = SessionLabels.abbreviate(label, 20);
         String status = session.endedEarly ? "Ended early"
                 : FocusSession.STATUS_CLAIMED.equals(session.status) ? "Completed"
                 : FocusSession.STATUS_CANCELLED.equals(session.status) ? "Ended early"
@@ -999,7 +1012,33 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    private void refreshCalendarScreen() {
+        if (!LocalDate.now().equals(renderedDay)) {
+            if ("Focus Grove".equals(currentScreen)) showHome();
+            else if ("Focus statistics".equals(currentScreen)) showStats();
+        }
+    }
+
+    private void scheduleCalendarRefresh() {
+        calendarHandler.removeCallbacks(calendarRefresh);
+        long midnight = LocalDate.now().plusDays(1).atStartOfDay(ZoneId.systemDefault())
+                .toInstant().toEpochMilli();
+        calendarHandler.postDelayed(calendarRefresh, Math.max(1L, midnight - System.currentTimeMillis()));
+    }
+
+    @Override protected void onResume() {
+        super.onResume();
+        refreshCalendarScreen();
+        scheduleCalendarRefresh();
+    }
+
+    @Override protected void onPause() {
+        calendarHandler.removeCallbacks(calendarRefresh);
+        super.onPause();
+    }
+
     @Override protected void onDestroy() {
+        calendarHandler.removeCallbacks(calendarRefresh);
         if (timerReceiver != null) unregisterReceiver(timerReceiver);
         super.onDestroy();
     }
