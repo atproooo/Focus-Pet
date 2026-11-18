@@ -10,6 +10,7 @@ public class PetFeaturesTest {
     @Test public void catalogKeepsCurrenciesSeparate() {
         Set<String> ids=new HashSet<>();
         for(ShopProduct p:ShopCatalog.PRODUCTS){assertTrue(ids.add(p.id));assertEquals(p.productType==ProductType.PET_EGG?Currency.ESSENCE:Currency.COINS,p.currency);if(p.productType==ProductType.COSMETIC)assertNotNull(ShopCatalog.cosmetic(p.itemKey));}
+        assertNull("Pet Eggs are focus-drop only and must not be sold", ShopCatalog.product("egg"));
     }
     @Test public void interactionsAreBoundedAndRestoresEnergy() {
         assertEquals(100,PetInteraction.moodAfter(98,PetInteraction.Action.PET));

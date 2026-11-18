@@ -17,6 +17,7 @@ import com.example.focuspet.model.FocusPetModels.CosmeticItem;
 public final class FocusStore {
     private final SharedPreferences preferences;
     private final Clock clock;
+    /** Guards the whole check-balance -> deduct -> grant -> receipt critical section across all instances. */
     static final Object CALENDAR_LOCK = new Object();
 
     public FocusStore(Context context) {

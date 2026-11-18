@@ -592,7 +592,24 @@ public class MainActivity extends AppCompatActivity {
                 .setTitle("End focus session?")
                 .setMessage("You can still claim rewards for the time you focused, but ending early may reduce XP, coins, Life Essence, Pet Egg chances, and the minutes credited toward your daily goal, by 70%.")
                 .setNegativeButton("No", null)
-                .setPositiveButton("Yes, end session", (dialog, which) ->
+                .setPositiveButton("Yes, end session", (dialog, which) -> {
+                    long totalMillis = (long) store.activeMinutes() * 60_000L;
+                    long remaining = store.activePaused()
+                            ? store.activeRemaining()
+                            : Math.max(0L, store.activeEndAt() - SystemClock.elapsedRealtime());
+                    int focusedMinutes = (int) (Math.max(0L, totalMillis - remaining) / 60_000L);
+                    if (focusedMinutes < 4) showFinalEndWarning();
+                    else sendService(FocusService.ACTION_CANCEL);
+                })
+                .show();
+    }
+
+    private void showFinalEndWarning() {
+        new AlertDialog.Builder(this)
+                .setTitle("Really end your session early?")
+                .setMessage("Sessions under 4 focused minutes may count as 0 minutes toward your goal. This cannot be undone — do you still want to end now?")
+                .setNegativeButton("No, keep focusing", null)
+                .setPositiveButton("Yes, end anyway", (dialog, which) ->
                         sendService(FocusService.ACTION_CANCEL))
                 .show();
     }
@@ -681,9 +698,12 @@ public class MainActivity extends AppCompatActivity {
 
         LinearLayout resourceBar = screen.findViewById(R.id.resource_bar);
         addResourceChip(resourceBar, "🪙\nCoins\n" + store.coins(), "Coins",
-                "Coins buy clothing and decorations in the shop.");
+                "You have " + store.coins() + " Coins.\n"
+                        + "Earned by completing focus sessions. Spend them on clothing and decorations in the Shop.");
         addResourceChip(resourceBar, "✨\nEssence\n" + store.lifeEssence(), "Life Essence",
-                "Essence buys Pet Eggs. Hatching also costs 100 Essence and one egg.");
+                "You have " + store.lifeEssence() + " Life Essence.\n"
+                        + "Earned through focus. Hatching one Pet Egg costs 100 Essence. "
+                        + "Pet Eggs drop from focus sessions over time.");
         addResourceChip(resourceBar, "🥚  Eggs  " + store.petEggs(), "Pet Eggs", null);
         Button shop = button("Shop", v -> showShop());
         shop.setId(R.id.open_shop);
@@ -710,8 +730,6 @@ public class MainActivity extends AppCompatActivity {
         chip.setOnClickListener(v -> {
             if ("Pet Eggs".equals(title)) {
                 showHatching();
-            } else if ("Coins".equals(title) || "Life Essence".equals(title)) {
-                showShop();
             } else {
                 new AlertDialog.Builder(this)
                         .setTitle(title)
@@ -893,8 +911,8 @@ public class MainActivity extends AppCompatActivity {
                 + "\nPet Eggs: " + store.petEggs(), 18, Color.DKGRAY);
         balance.setId(R.id.shop_balance);
         content.addView(balance);
-        content.addView(text("Coins buy clothing and decorations. Essence buys Pet Eggs.\n"
-                + "Hatching costs one egg and 100 Essence.", 15, Color.DKGRAY));
+        content.addView(text("Coins buy clothing and decorations.\n"
+                + "Pet Eggs drop from focus sessions. Hatching costs one egg and 100 Essence.", 15, Color.DKGRAY));
         for (ShopProduct product : ShopCatalog.PRODUCTS) {
             LinearLayout row = new LinearLayout(this);
             row.setOrientation(LinearLayout.VERTICAL);

@@ -16,7 +16,7 @@ public final class ShopCatalog {
             new CosmeticItem("shirt", "Simple shirt", "clothing", "clothing", "A reusable clothing item.", null, true),
             new CosmeticItem("decoration", "Simple decoration", "decoration", "decoration", "A reusable pet decoration.", null, true)));
     public static final List<ShopProduct> PRODUCTS = Collections.unmodifiableList(Arrays.asList(
-            new ShopProduct("egg", "Pet Egg", ProductType.PET_EGG, "standard_egg", Currency.ESSENCE, 100, 1, true),
+            // Pet Eggs are earned through focus drops only; they are not sold in the shop.
             new ShopProduct("collar", "Simple collar", ProductType.COSMETIC, "collar", Currency.COINS, 25, 1, true),
             new ShopProduct("shirt", "Simple shirt", ProductType.COSMETIC, "shirt", Currency.COINS, 50, 1, true),
             new ShopProduct("decoration", "Simple decoration", ProductType.COSMETIC, "decoration", Currency.COINS, 75, 1, true)));
