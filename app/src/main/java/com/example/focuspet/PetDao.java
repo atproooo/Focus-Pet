@@ -20,6 +20,12 @@ public interface PetDao {
     @Query("SELECT * FROM pets WHERE id = :id LIMIT 1")
     Pet byId(long id);
 
+    @Query("SELECT * FROM pets WHERE hatchRequestId = :requestId LIMIT 1")
+    Pet byHatchRequest(String requestId);
+
+    @Query("UPDATE pets SET mood = :mood, energy = :energy, lastInteractionAt = :at WHERE id = :id")
+    void updateInteraction(long id, int mood, int energy, long at);
+
     @Query("SELECT * FROM pets WHERE selected = 1 LIMIT 1")
     Pet selected();
 

@@ -5,12 +5,19 @@ import android.content.SharedPreferences;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.Collections;
+import com.example.focuspet.model.FocusPetModels.Currency;
+import com.example.focuspet.model.FocusPetModels.ProductType;
+import com.example.focuspet.model.FocusPetModels.ShopProduct;
+import com.example.focuspet.model.FocusPetModels.CosmeticItem;
 
 /** Offline MVP store; the repository boundary can later be backed by Room. */
 public final class FocusStore {
     private final SharedPreferences preferences;
     private final Clock clock;
-    private static final Object CALENDAR_LOCK = new Object();
+    static final Object CALENDAR_LOCK = new Object();
 
     public FocusStore(Context context) {
         this(context, Clock.systemDefaultZone());
@@ -137,18 +144,105 @@ public final class FocusStore {
         preferences.edit().putInt("egg_misses", misses).apply();
     }
 
-    public boolean consumeHatchingResources() {
-        if (petEggs() < 1 || lifeEssence() < 100) return false;
-        preferences.edit().putInt("pet_eggs", petEggs() - 1)
-                .putInt("life_essence", lifeEssence() - 100).apply();
-        return true;
+    public boolean canHatch() {
+        return petEggs() > 0 && lifeEssence() >= ShopCatalog.HATCH_ESSENCE_COST;
+    }
+
+    static final class HatchRequest {
+        final String id;
+        final long createdAt;
+        HatchRequest(String id, long createdAt) { this.id = id; this.createdAt = createdAt; }
+    }
+
+    HatchRequest pendingHatch() {
+        String id = preferences.getString("pending_hatch_id", null);
+        return id == null ? null : new HatchRequest(id, preferences.getLong("pending_hatch_at", 0));
+    }
+
+    /** Persist the deduction and a recovery journal together before creating the Room pet. */
+    HatchRequest beginHatch(String requestId) {
+        synchronized (CALENDAR_LOCK) {
+            HatchRequest pending = pendingHatch();
+            if (pending != null) return pending;
+            if (!canHatch()) return null;
+            long now = System.currentTimeMillis();
+            if (!preferences.edit().putInt("pet_eggs", petEggs() - 1)
+                    .putInt("life_essence", lifeEssence() - ShopCatalog.HATCH_ESSENCE_COST)
+                    .putString("pending_hatch_id", requestId).putLong("pending_hatch_at", now).commit()) {
+                throw new IllegalStateException("Unable to save hatching request");
+            }
+            return new HatchRequest(requestId, now);
+        }
+    }
+
+    void finishHatch(long petId) {
+        if (!preferences.edit().remove("pending_hatch_id").remove("pending_hatch_at")
+                .putLong("hatch_result_pet_id", petId).commit()) {
+            throw new IllegalStateException("Unable to save hatch result");
+        }
+    }
+
+    public long hatchResultPetId() { return preferences.getLong("hatch_result_pet_id", 0); }
+    public void acknowledgeHatchResult() { preferences.edit().remove("hatch_result_pet_id").apply(); }
+
+    public enum PurchaseResult { PURCHASED, ALREADY_OWNED, INSUFFICIENT_RESOURCES, INVALID_PRODUCT, INVALID_REQUEST, STORAGE_ERROR }
+
+    public Set<String> ownedCosmeticIds() {
+        return Collections.unmodifiableSet(new HashSet<>(preferences.getStringSet("owned_cosmetics", Collections.emptySet())));
+    }
+
+    /** Balance deduction, permanent unlock/egg grant and receipt use one atomic preference edit. */
+    public PurchaseResult purchase(String productId, String requestId) {
+        synchronized (CALENDAR_LOCK) {
+            ShopProduct product = ShopCatalog.product(productId);
+            if (product == null || !product.available) return PurchaseResult.INVALID_PRODUCT;
+            if (requestId == null || requestId.trim().isEmpty()) return PurchaseResult.INVALID_REQUEST;
+            String receipt = preferences.getString("purchase_" + requestId, null);
+            if (receipt != null) return receipt.startsWith(productId + "|")
+                    ? PurchaseResult.PURCHASED : PurchaseResult.INVALID_REQUEST;
+            Set<String> owned = new HashSet<>(ownedCosmeticIds());
+            if (product.productType == ProductType.COSMETIC && owned.contains(product.itemKey)) return PurchaseResult.ALREADY_OWNED;
+            int balance = product.currency == Currency.COINS ? coins() : lifeEssence();
+            if (balance < product.price) return PurchaseResult.INSUFFICIENT_RESOURCES;
+            if (product.productType == ProductType.PET_EGG
+                    && (long) petEggs() + product.quantityGranted > Integer.MAX_VALUE) return PurchaseResult.INVALID_REQUEST;
+            SharedPreferences.Editor editor = preferences.edit()
+                    .putInt(product.currency == Currency.COINS ? "coins" : "life_essence", balance - (int) product.price);
+            if (product.productType == ProductType.COSMETIC) {
+                owned.add(product.itemKey);
+                editor.putStringSet("owned_cosmetics", owned);
+            } else editor.putInt("pet_eggs", petEggs() + product.quantityGranted);
+            editor.putString("purchase_" + requestId, product.id + "|" + product.currency + "|" + product.price
+                    + "|" + product.quantityGranted + "|" + System.currentTimeMillis());
+            return editor.commit() ? PurchaseResult.PURCHASED : PurchaseResult.STORAGE_ERROR;
+        }
+    }
+
+    boolean equip(long petId, String itemId) {
+        synchronized (CALENDAR_LOCK) {
+            CosmeticItem item = ShopCatalog.cosmetic(itemId);
+            return item != null && ownedCosmeticIds().contains(itemId)
+                    && preferences.edit().putString("pet_equipped_" + petId + "_" + item.slotKey, itemId).commit();
+        }
+    }
+
+    public String equippedItemId(long petId, String slot) {
+        return preferences.getString("pet_equipped_" + petId + "_" + slot, null);
+    }
+
+    public void unequip(long petId, String slot) {
+        synchronized (CALENDAR_LOCK) {
+            preferences.edit().remove("pet_equipped_" + petId + "_" + slot).apply();
+        }
     }
 
     public void addDebugResources(int coins, int essence, int eggs) {
-        preferences.edit().putInt("coins", coins() + Math.max(0, coins))
-                .putInt("life_essence", lifeEssence() + Math.max(0, essence))
-                .putInt("pet_eggs", petEggs() + Math.max(0, eggs)).apply();
+        synchronized (CALENDAR_LOCK) {
+            preferences.edit().putInt("coins", (int) Math.min(Integer.MAX_VALUE, (long) coins() + Math.max(0, coins)))
+                    .putInt("life_essence", (int) Math.min(Integer.MAX_VALUE, (long) lifeEssence() + Math.max(0, essence)))
+                    .putInt("pet_eggs", (int) Math.min(Integer.MAX_VALUE, (long) petEggs() + Math.max(0, eggs))).apply();
+        }
     }
 
-    public void reset() { preferences.edit().clear().apply(); }
+    public void reset() { synchronized (CALENDAR_LOCK) { preferences.edit().clear().apply(); } }
 }

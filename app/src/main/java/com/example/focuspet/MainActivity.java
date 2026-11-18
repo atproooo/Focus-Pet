@@ -41,6 +41,11 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.UUID;
+import com.example.focuspet.model.FocusPetModels.CosmeticItem;
+import com.example.focuspet.model.FocusPetModels.ShopProduct;
+import com.example.focuspet.model.FocusPetModels.ProductType;
+import com.example.focuspet.model.FocusPetModels.Currency;
 
 public class MainActivity extends AppCompatActivity {
     private static final int NOTIFICATION_REQUEST = 7;
@@ -58,6 +63,7 @@ public class MainActivity extends AppCompatActivity {
     private BroadcastReceiver timerReceiver;
     private String currentScreen;
     private LocalDate renderedDay;
+    private long hatchResultPetId;
     private final Handler calendarHandler = new Handler(Looper.getMainLooper());
     private final Runnable calendarRefresh = new Runnable() {
         @Override public void run() {
@@ -102,6 +108,8 @@ public class MainActivity extends AppCompatActivity {
             FocusSession pending = repository.latestPending();
             if (pending != null) {
                 showFinish(pending.id, pending.actualMinutes, pending.endedEarly);
+            } else if (store.hatchResultPetId() > 0 && repository.pet(store.hatchResultPetId()) != null) {
+                showHatchResult(repository.pet(store.hatchResultPetId()));
             } else {
                 showHome();
             }
@@ -325,6 +333,10 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void reset(String screenTitle) {
+        if (hatchResultPetId > 0 && !"New pet".equals(screenTitle)) {
+            store.acknowledgeHatchResult();
+            hatchResultPetId = 0;
+        }
         currentScreen = screenTitle;
         renderedDay = LocalDate.now();
         title.setText(screenTitle);
@@ -529,12 +541,15 @@ public class MainActivity extends AppCompatActivity {
         progress.setProgressTintList(android.content.res.ColorStateList.valueOf(PURPLE));
         progress.setProgressBackgroundTintList(android.content.res.ColorStateList.valueOf(LAVENDER));
         content.addView(progress, new LinearLayout.LayoutParams(-1, dp(12)));
-        TextView encouragement = text("Mochi is cheering you on.", 19, Color.rgb(35, 29, 38));
+        Pet companion = repository.selectedPet();
+        TextView encouragement = text((companion == null ? "Your pet" : companion.name)
+                + " is cheering you on.", 19, Color.rgb(35, 29, 38));
         encouragement.setGravity(Gravity.CENTER);
         encouragement.setPadding(0, dp(24), 0, dp(28));
         content.addView(encouragement);
         Button end = outlineButton("End session", v -> showEndSessionConfirmation());
         content.addView(end);
+        content.addView(petAnimationSlot(companion));
         timerReceiver = new BroadcastReceiver() {
             @Override public void onReceive(Context context, Intent intent) {
                 if (FocusService.ACTION_TICK.equals(intent.getAction())) {
@@ -577,16 +592,7 @@ public class MainActivity extends AppCompatActivity {
                 .setTitle("End focus session?")
                 .setMessage("You can still claim rewards for the time you focused, but ending early may reduce XP, coins, Life Essence, Pet Egg chances, and the minutes credited toward your daily goal, by 70%.")
                 .setNegativeButton("No", null)
-                .setPositiveButton("Yes, end session", (dialog, which) -> showFinalEndWarning())
-                .show();
-    }
-
-    private void showFinalEndWarning() {
-        new AlertDialog.Builder(this)
-                .setTitle("Really end your session early?")
-                .setMessage("Sessions under 4 focused minutes may count as 0 minutes toward your goal. This cannot be undone — do you still want to end now?")
-                .setNegativeButton("No, keep focusing", null)
-                .setPositiveButton("Yes, end anyway", (dialog, which) ->
+                .setPositiveButton("Yes, end session", (dialog, which) ->
                         sendService(FocusService.ACTION_CANCEL))
                 .show();
     }
@@ -675,10 +681,13 @@ public class MainActivity extends AppCompatActivity {
 
         LinearLayout resourceBar = screen.findViewById(R.id.resource_bar);
         addResourceChip(resourceBar, "🪙\nCoins\n" + store.coins(), "Coins",
-                "Coins can be used for future shop items and pet accessories.");
+                "Coins buy clothing and decorations in the shop.");
         addResourceChip(resourceBar, "✨\nEssence\n" + store.lifeEssence(), "Life Essence",
-                "Life Essence is used to hatch Pet Eggs. One egg requires 100 Essence.");
+                "Essence buys Pet Eggs. Hatching also costs 100 Essence and one egg.");
         addResourceChip(resourceBar, "🥚  Eggs  " + store.petEggs(), "Pet Eggs", null);
+        Button shop = button("Shop", v -> showShop());
+        shop.setId(R.id.open_shop);
+        screen.addView(shop, 1);
 
         LinearLayout ownedPets = screen.findViewById(R.id.owned_pets_container);
         Pet selected = repository.selectedPet();
@@ -701,6 +710,8 @@ public class MainActivity extends AppCompatActivity {
         chip.setOnClickListener(v -> {
             if ("Pet Eggs".equals(title)) {
                 showHatching();
+            } else if ("Coins".equals(title) || "Life Essence".equals(title)) {
+                showShop();
             } else {
                 new AlertDialog.Builder(this)
                         .setTitle(title)
@@ -725,6 +736,9 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void showPetDetail(Pet pet) {
+        Pet latest = repository.pet(pet.id);
+        if (latest == null) { showCollection(); return; }
+        pet = latest;
         reset(pet.name + "'s details");
         setActiveTab(1);
         LinearLayout screen = (LinearLayout) LayoutInflater.from(this)
@@ -734,16 +748,26 @@ public class MainActivity extends AppCompatActivity {
         ((TextView) screen.findViewById(R.id.pet_detail_name))
                 .setText(pet.name + " the " + pet.species);
         ((TextView) screen.findViewById(R.id.pet_detail_meta)).setText(
-                pet.rarity + " companion" + (pet.selected ? "  •  Selected" : "")
-                        + "\nLevel " + pet.level() + "  •  " + pet.experience + " XP"
-                        + "\nMood / energy: " + pet.mood + " / " + pet.energy);
+                petDetailMeta(pet));
         ((ProgressBar) screen.findViewById(R.id.pet_detail_progress))
                 .setProgress(pet.experience % 100);
         ((TextView) screen.findViewById(R.id.pet_detail_description)).setText(
                 pet.description + "\n\nHatched: "
                         + new SimpleDateFormat("MMM d, yyyy", Locale.US)
                         .format(new Date(pet.hatchedAt))
-                        + "\nAppearance: " + pet.appearanceData);
+                        + "\nWearing: " + equippedSummary(pet.id));
+        long petId = pet.id;
+        LinearLayout actions = screen.findViewById(R.id.pet_detail_actions);
+        actions.addView(text("Interact with your pet", 17, PURPLE_DARK));
+        TextView feedback = text("Give your pet a short break between interactions.", 14, Color.DKGRAY);
+        feedback.setId(R.id.pet_interaction_feedback);
+        actions.addView(feedback);
+        addInteraction(actions, screen, petId, "Pet", R.id.pet_interaction_pet, PetInteraction.Action.PET, feedback);
+        addInteraction(actions, screen, petId, "Play", R.id.pet_interaction_play, PetInteraction.Action.PLAY, feedback);
+        addInteraction(actions, screen, petId, "Rest", R.id.pet_interaction_rest, PetInteraction.Action.REST, feedback);
+        Button wardrobe = button("Customize", v -> showWardrobe(petId));
+        wardrobe.setId(R.id.open_wardrobe);
+        actions.addView(wardrobe);
     }
 
     private void showHatching() {
@@ -756,29 +780,180 @@ public class MainActivity extends AppCompatActivity {
 
         int eggs = store.petEggs();
         int essence = store.lifeEssence();
-        boolean canHatch = eggs > 0 && essence >= 100;
+        boolean canHatch = store.canHatch() || store.pendingHatch() != null;
         ((TextView) screen.findViewById(R.id.hatching_inventory)).setText(
                 "Pet Eggs: " + eggs + "\nLife Essence: " + essence + " / 100 required");
         Button hatchButton = screen.findViewById(R.id.hatch_button);
-        hatchButton.setBackgroundResource(canHatch
-                ? R.drawable.bg_focuspet_hatch_enabled
-                : R.drawable.bg_focuspet_hatch_disabled);
+        setAvailable(hatchButton, canHatch);
+        if (store.pendingHatch() != null) hatchButton.setText("Resume hatching");
+        final String requestId = UUID.randomUUID().toString();
         hatchButton.setOnClickListener(v -> {
-            if (store.consumeHatchingResources()) {
-                repository.hatchDefaultPet();
-                new AlertDialog.Builder(this)
-                        .setTitle("hatch success")
-                        .setMessage("Your egg has been opened. The new pet result area is ready for future pet generation.")
-                        .setPositiveButton("OK", (dialog, which) -> showHatching())
-                        .show();
-            } else {
-                new AlertDialog.Builder(this)
-                        .setTitle("Not enough resources")
-                        .setMessage("You need 1 Pet Egg and 100 Life Essence to hatch.")
-                        .setPositiveButton("OK", null)
-                        .show();
+            setAvailable(hatchButton, false);
+            try {
+                Pet hatched = repository.hatchPet(requestId);
+                if (hatched != null) showHatchResult(hatched);
+                else { toast("You need 1 Pet Egg and 100 Essence."); showHatching(); }
+            } catch (IllegalStateException error) {
+                toast("Hatching was interrupted. Please try again.");
+                showHatching();
             }
         });
+    }
+
+    private void toast(String message) {
+        android.widget.Toast.makeText(this, message, android.widget.Toast.LENGTH_SHORT).show();
+    }
+
+    private void setAvailable(Button button, boolean available) {
+        button.setEnabled(available);
+        button.setBackgroundTintList(android.content.res.ColorStateList.valueOf(
+                available ? PURPLE : Color.rgb(218, 218, 218)));
+        button.setTextColor(available ? Color.WHITE : Color.rgb(105, 105, 105));
+    }
+
+    private String equippedSummary(long petId) {
+        List<String> names = new ArrayList<>();
+        for (CosmeticItem item : ShopCatalog.COSMETICS) {
+            if (item.id.equals(store.equippedItemId(petId, item.slotKey))) names.add(item.name);
+        }
+        return names.isEmpty() ? "None" : android.text.TextUtils.join(", ", names);
+    }
+
+    private View petAnimationSlot(Pet pet) {
+        View slot = LayoutInflater.from(this).inflate(R.layout.view_pet_animation, content, false);
+        bindPetAnimation(slot, pet);
+        return slot;
+    }
+
+    private void bindPetAnimation(View slot, Pet pet) {
+        slot.setTag(pet == null ? null : pet.id);
+        slot.findViewById(R.id.pet_animation_image).setTag(pet == null ? null : pet.imageKey);
+        ((TextView) slot.findViewById(R.id.pet_animation_placeholder))
+                .setText((pet == null ? "Your pet" : pet.name) + "\nPet animation");
+        slot.setContentDescription(pet == null ? "Reserved pet animation area"
+                : "Animation area for " + pet.name + ". Wearing: " + equippedSummary(pet.id));
+    }
+
+    private void showHatchResult(Pet pet) {
+        reset("New pet");
+        hatchResultPetId = pet.id;
+        setSessionLock(false);
+        setActiveTab(1);
+        View screen = LayoutInflater.from(this).inflate(R.layout.screen_hatch_result, content, false);
+        content.addView(screen);
+        ((TextView) screen.findViewById(R.id.hatch_result_name)).setText(pet.name + " the " + pet.species);
+        ((TextView) screen.findViewById(R.id.hatch_result_meta)).setText(
+                "Hatched successfully\n" + pet.rarity + "  •  Level " + pet.level());
+        bindPetAnimation(screen.findViewById(R.id.pet_animation_container), pet);
+        LinearLayout actions = screen.findViewById(R.id.hatch_result_actions);
+        Button select = button("Choose as companion", v -> {
+            repository.selectPet(pet.id);
+            showHome();
+        });
+        select.setId(R.id.hatch_result_select);
+        actions.addView(select);
+        actions.addView(button("View pet", v -> showPetDetail(pet)));
+        actions.addView(outlineButton("Back to collection", v -> showCollection()));
+    }
+
+    private String petDetailMeta(Pet pet) {
+        return pet.rarity + " companion" + (pet.selected ? "  •  Selected" : "")
+                + "\nLevel " + pet.level() + "  •  " + pet.experience + " XP"
+                + "\nMood / energy: " + pet.mood + " / " + pet.energy;
+    }
+
+    private void addInteraction(LinearLayout parent, View screen, long petId, String label, int id,
+                                PetInteraction.Action action, TextView feedback) {
+        Button control = outlineButton(label, v -> {
+            FocusRepository.InteractionResult result = repository.interact(petId, action);
+            Pet updated = repository.pet(petId);
+            if (updated == null) { showCollection(); return; }
+            ((TextView) screen.findViewById(R.id.pet_detail_meta)).setText(petDetailMeta(updated));
+            switch (result) {
+                case UPDATED:
+                    feedback.setText(action == PetInteraction.Action.PET ? updated.name + " enjoyed being petted."
+                            : action == PetInteraction.Action.PLAY ? updated.name + " enjoyed playing with you."
+                            : updated.name + " rested and recovered energy.");
+                    break;
+                case COOLDOWN: feedback.setText("Please wait a few seconds before another interaction."); break;
+                case LOW_ENERGY: feedback.setText("Your pet needs to rest before playing again."); break;
+                default: feedback.setText("This pet is no longer available.");
+            }
+        });
+        control.setId(id);
+        parent.addView(control);
+    }
+
+    private void showShop() {
+        reset("Shop");
+        setSessionLock(false);
+        setActiveTab(1);
+        content.addView(outlineButton("Back to collection", v -> showCollection()));
+        TextView balance = text("Coins: " + store.coins() + "\nEssence: " + store.lifeEssence()
+                + "\nPet Eggs: " + store.petEggs(), 18, Color.DKGRAY);
+        balance.setId(R.id.shop_balance);
+        content.addView(balance);
+        content.addView(text("Coins buy clothing and decorations. Essence buys Pet Eggs.\n"
+                + "Hatching costs one egg and 100 Essence.", 15, Color.DKGRAY));
+        for (ShopProduct product : ShopCatalog.PRODUCTS) {
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.VERTICAL);
+            row.addView(text(product.name, 19, PURPLE_DARK));
+            boolean cosmetic = product.productType == ProductType.COSMETIC;
+            boolean owned = cosmetic && store.ownedCosmeticIds().contains(product.itemKey);
+            String currency = product.currency == Currency.COINS ? "Coins" : "Essence";
+            boolean enough = (product.currency == Currency.COINS ? store.coins() : store.lifeEssence()) >= product.price;
+            String label = owned ? "Owned" : enough ? "Buy — " + product.price + " " + currency
+                    : "Need " + product.price + " " + currency;
+            Button buy = button(label, v -> confirmPurchase(product));
+            buy.setTag("buy_" + product.id);
+            setAvailable(buy, !owned && enough);
+            row.addView(buy);
+            if (cosmetic) row.addView(text("Permanently unlocked for your pets.", 14, Color.DKGRAY));
+            content.addView(row);
+        }
+        Pet selected = repository.selectedPet();
+        if (selected != null) content.addView(button("Customize companion", v -> showWardrobe(selected.id)));
+    }
+
+    private void confirmPurchase(ShopProduct product) {
+        String requestId = UUID.randomUUID().toString();
+        new AlertDialog.Builder(this).setTitle("Buy " + product.name + "?")
+                .setMessage(product.price + (product.currency == Currency.COINS ? " Coins" : " Essence"))
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Buy", (dialog, which) -> {
+                    FocusStore.PurchaseResult result = store.purchase(product.id, requestId);
+                    if (result == FocusStore.PurchaseResult.PURCHASED) toast("Purchased " + product.name + ".");
+                    else if (result == FocusStore.PurchaseResult.ALREADY_OWNED) toast("You already own this item.");
+                    else if (result == FocusStore.PurchaseResult.INSUFFICIENT_RESOURCES) toast("Not enough resources.");
+                    else toast("Purchase could not be saved. Please try again.");
+                    showShop();
+                }).show();
+    }
+
+    private void showWardrobe(long petId) {
+        Pet pet = repository.pet(petId);
+        if (pet == null) { showCollection(); return; }
+        reset("Customize " + pet.name);
+        setActiveTab(1);
+        content.addView(outlineButton("Back to pet", v -> showPetDetail(pet)));
+        content.addView(text("Wearing: " + equippedSummary(petId), 17, Color.DKGRAY));
+        boolean hasItems = false;
+        for (CosmeticItem item : ShopCatalog.COSMETICS) {
+            if (!store.ownedCosmeticIds().contains(item.id)) continue;
+            hasItems = true;
+            content.addView(text(item.name, 18, PURPLE_DARK));
+            boolean equipped = item.id.equals(store.equippedItemId(petId, item.slotKey));
+            Button toggle = button(equipped ? "Remove " + item.name : "Equip " + item.name, v -> {
+                if (equipped) store.unequip(petId, item.slotKey);
+                else if (!repository.equipCosmetic(petId, item.id)) toast("This item is not available.");
+                showWardrobe(petId);
+            });
+            toggle.setTag("equip_" + item.id);
+            content.addView(toggle);
+        }
+        if (!hasItems) content.addView(text("Buy clothing and decorations in the shop to customize your pet.", 16, Color.DKGRAY));
+        content.addView(button("Shop", v -> showShop()));
     }
 
     private void showCompanionChooser() {

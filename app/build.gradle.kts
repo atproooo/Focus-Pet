@@ -33,6 +33,7 @@ android {
         viewBinding = true
         buildConfig = true
     }
+    sourceSets.getByName("main").java.srcDir("../data-model/src/main/java")
 }
 
 dependencies {

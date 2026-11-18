@@ -14,9 +14,11 @@ public final class FocusRepository {
     private final FocusSessionDao sessions;
     private final PetDao pets;
     private final FocusStore progress;
+    private final FocusDatabase database;
     private final ExecutorService databaseExecutor = Executors.newSingleThreadExecutor();
 
     public FocusRepository(Context context) {
+        database = FocusDatabase.getInstance(context);
         sessions = FocusDatabase.getInstance(context).focusSessionDao();
         pets = FocusDatabase.getInstance(context).petDao();
         progress = new FocusStore(context);
@@ -26,14 +28,18 @@ public final class FocusRepository {
                 return null;
             });
         }
+        FocusStore.HatchRequest pendingHatch = progress.pendingHatch();
+        if (pendingHatch != null) hatchPet(pendingHatch.id);
     }
 
     /** Erases all persisted sessions, pets, and preferences in one serialized operation. */
     public void clearAllData() {
         run(() -> {
-            sessions.deleteAll();
-            pets.deleteAll();
-            progress.reset();
+            synchronized (FocusStore.CALENDAR_LOCK) {
+                sessions.deleteAll();
+                pets.deleteAll();
+                progress.reset();
+            }
             return null;
         });
     }
@@ -154,6 +160,8 @@ public final class FocusRepository {
         return run(pets::selected);
     }
 
+    public Pet pet(long id) { return run(() -> pets.byId(id)); }
+
     public Pet ensureStarterPet() {
         return run(() -> {
             Pet selected = pets.selected();
@@ -176,22 +184,70 @@ public final class FocusRepository {
     }
 
     public Pet hatchDefaultPet() {
+        return run(() -> insertHatchedPet(null));
+    }
+
+    private Pet insertHatchedPet(FocusStore.HatchRequest request) {
+        Pet pet = new Pet();
+        pet.templateId = "default_hatched";
+        pet.name = "Freshman";
+        pet.species = "Cat";
+        pet.rarity = "Common";
+        pet.imageKey = "pet_default";
+        pet.appearanceData = "default";
+        pet.description = "A newly hatched pet waiting to grow.";
+        pet.hatchedAt = request == null ? System.currentTimeMillis() : request.createdAt;
+        pet.hatchRequestId = request == null ? null : request.id;
+        pet.mood = 100;
+        pet.energy = 100;
+        pet.selected = false;
+        pet.id = pets.insert(pet);
+        return pet;
+    }
+
+    /** A persisted request and a unique pet key recover interruptions without a second charge. */
+    public Pet hatchPet(String requestId) {
+        if (requestId == null || requestId.trim().isEmpty()) throw new IllegalArgumentException("Missing hatch request");
         return run(() -> {
-            Pet pet = new Pet();
-            pet.templateId = "default_hatched";
-            pet.name = "Freshman";
-            pet.species = "Cat";
-            pet.rarity = "Common";
-            pet.imageKey = "pet_default";
-            pet.appearanceData = "default";
-            pet.description = "A newly hatched pet waiting to grow.";
-            pet.hatchedAt = System.currentTimeMillis();
-            pet.mood = 100;
-            pet.energy = 100;
-            pet.selected = false;
-            pet.id = pets.insert(pet);
-            return pet;
+            synchronized (FocusStore.CALENDAR_LOCK) {
+                Pet existing = pets.byHatchRequest(requestId);
+                if (existing != null) {
+                    FocusStore.HatchRequest pending = progress.pendingHatch();
+                    if (pending != null && pending.id.equals(requestId)) progress.finishHatch(existing.id);
+                    return existing;
+                }
+                FocusStore.HatchRequest request = progress.beginHatch(requestId);
+                if (request == null) return null;
+                Pet pet = pets.byHatchRequest(request.id);
+                if (pet == null) pet = insertHatchedPet(request);
+                progress.finishHatch(pet.id);
+                return pet;
+            }
         });
+    }
+
+    public boolean equipCosmetic(long petId, String itemId) {
+        return run(() -> pets.byId(petId) != null && progress.equip(petId, itemId));
+    }
+
+    public enum InteractionResult { UPDATED, COOLDOWN, LOW_ENERGY, NOT_FOUND }
+
+    public InteractionResult interact(long petId, PetInteraction.Action action) {
+        return interact(petId, action, System.currentTimeMillis());
+    }
+
+    InteractionResult interact(long petId, PetInteraction.Action action, long now) {
+        if (action == null) throw new IllegalArgumentException("Missing interaction");
+        return run(() -> database.runInTransaction(() -> {
+            Pet pet = pets.byId(petId);
+            if (pet == null) return InteractionResult.NOT_FOUND;
+            if (pet.lastInteractionAt > 0 && now >= pet.lastInteractionAt
+                    && now - pet.lastInteractionAt < PetInteraction.COOLDOWN_MILLIS) return InteractionResult.COOLDOWN;
+            if (action == PetInteraction.Action.PLAY && pet.energy < 5) return InteractionResult.LOW_ENERGY;
+            pets.updateInteraction(petId, PetInteraction.moodAfter(pet.mood, action),
+                    PetInteraction.energyAfter(pet.energy, action), now);
+            return InteractionResult.UPDATED;
+        }));
     }
 
     public void selectPet(long id) {

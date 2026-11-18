@@ -175,3 +175,9 @@ The standalone Java 11 prototype in [`FocusPetModels.java`](data-model/src/main/
 - **Persistence and safety:** existing pets, sessions, balances, and eggs should be preserved during any future migration. A future implementation should make purchases atomic and idempotent, including the balance deduction, item grant, and purchase record. It should define a single source of truth for progress currently split between Room and `SharedPreferences`.
 
 These are data structures and basic field validations only. Room entities and migrations, purchase transactions, goal and history screens, customization UI, and artwork have not yet been implemented. The existing app still uses its current reward and hatching rules; whether to change random egg rewards or the Essence cost of hatching remains undecided.
+
+## Pet and shop implementation update (2026-11-18)
+
+The app now includes a shop (Coins for clothing/decorations, Essence for Pet Eggs), permanent cosmetic ownership, per-pet equip/remove controls, simple pet interactions, and a dedicated hatch result screen. Hatching continues to consume one egg and 100 Essence. Insufficient-resource hatch buttons are disabled and gray. The focus screen has an animation slot bound to the selected companion; art assets have not been added. The extra four-minute warning was removed, leaving the normal single confirmation.
+
+Purchases are persisted with duplicate-request protection. Hatching can recover interrupted requests, and Room v4-to-v5 migration preserves existing pets and history. Product and cosmetic types from `data-model` are now used by the Android app; the other standalone model types are still prototypes. See [implementation notes and validation](docs/pet-shop-2026-11-18.md) for initial prices, storage behavior and testing scope.

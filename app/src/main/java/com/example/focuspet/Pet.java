@@ -2,8 +2,10 @@ package com.example.focuspet;
 
 import androidx.room.Entity;
 import androidx.room.PrimaryKey;
+import androidx.room.ColumnInfo;
+import androidx.room.Index;
 
-@Entity(tableName = "pets")
+@Entity(tableName = "pets", indices = @Index(value = "hatchRequestId", unique = true))
 public class Pet {
     @PrimaryKey(autoGenerate = true)
     public long id;
@@ -19,6 +21,9 @@ public class Pet {
     public int mood;
     public int energy;
     public boolean selected;
+    public String hatchRequestId;
+    @ColumnInfo(defaultValue = "0")
+    public long lastInteractionAt;
 
     public int level() {
         return 1 + experience / 100;

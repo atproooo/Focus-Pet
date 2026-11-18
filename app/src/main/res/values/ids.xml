@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <item type="id" name="open_shop" />
+    <item type="id" name="open_wardrobe" />
+    <item type="id" name="shop_balance" />
+    <item type="id" name="pet_interaction_feedback" />
+    <item type="id" name="pet_interaction_pet" />
+    <item type="id" name="pet_interaction_play" />
+    <item type="id" name="pet_interaction_rest" />
+    <item type="id" name="hatch_result_select" />
+</resources>

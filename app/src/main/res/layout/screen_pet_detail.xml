@@ -70,20 +70,5 @@
         android:orientation="vertical"
         android:padding="14dp">
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Future interactions"
-            android:textColor="@color/focuspet_purple_dark"
-            android:textSize="17sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:paddingTop="6dp"
-            android:text="Reserved for feeding, customization, and pet interaction controls."
-            android:textColor="@color/focuspet_muted_text"
-            android:textSize="15sp" />
     </LinearLayout>
 </LinearLayout>
