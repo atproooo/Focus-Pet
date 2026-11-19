@@ -1,8 +1,16 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
     <!-- Base application theme. -->
     <style name="Base.Theme.FocusPet" parent="Theme.Material3.DayNight.NoActionBar">
-        <!-- Customize your light theme here. -->
-        <!-- <item name="colorPrimary">@color/my_light_primary</item> -->
+        <item name="colorPrimary">@color/button_primary</item>
+        <item name="colorPrimaryContainer">@color/background_accent</item>
+        <item name="colorOnPrimary">@color/text_on_button</item>
+        <item name="colorSurface">@color/background_app</item>
+        <item name="colorOnSurface">@color/text_primary</item>
+        <item name="android:colorBackground">@color/background_app</item>
+        <item name="android:textColorPrimary">@color/text_primary</item>
+        <item name="android:textColorSecondary">@color/text_secondary</item>
+        <item name="android:fontFamily">@font/fusion_pixel_10px_monospaced_latin</item>
+        <item name="fontFamily">@font/fusion_pixel_10px_monospaced_latin</item>
     </style>
 
     <style name="Theme.FocusPet" parent="Base.Theme.FocusPet" />

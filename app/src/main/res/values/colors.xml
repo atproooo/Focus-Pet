@@ -1,12 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="black">#FF000000</color>
-    <color name="white">#FFFFFFFF</color>
-    <color name="focuspet_surface">#FFFFF8FF</color>
-    <color name="focuspet_card">#FFE8E2EA</color>
-    <color name="focuspet_lavender">#FFEDE1FF</color>
-    <color name="focuspet_purple">#FF6C50AE</color>
-    <color name="focuspet_purple_dark">#FF523991</color>
-    <color name="focuspet_text">#FF231D26</color>
-    <color name="focuspet_muted_text">#FF4B4350</color>
+    <color name="text_primary">#262624</color>
+    <color name="text_secondary">#42403F</color>
+    <color name="text_on_button">#262624</color>
+
+    <color name="background_app">#EEF6C3</color>
+    <color name="background_card">#AACA87</color>
+    <color name="background_accent">#EFF8DB</color>
+
+    <color name="button_primary">#7D9B4B</color>
+    <color name="button_primary_pressed">#626F3C</color>
+    <color name="button_primary_disabled">#EFF8DB</color>
+    <color name="button_outline">#2F2D2B</color>
+    <color name="button_debug">#2F2D2B</color>
 </resources>

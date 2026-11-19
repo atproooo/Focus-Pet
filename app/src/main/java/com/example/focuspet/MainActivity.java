@@ -8,6 +8,7 @@ import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.Typeface;
+
 import android.graphics.drawable.StateListDrawable;
 import android.os.Build;
 import android.os.Bundle;
@@ -21,14 +22,17 @@ import android.view.View;
 import android.widget.FrameLayout;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.TextView;
+import android.util.TypedValue;
 
 import androidx.activity.OnBackPressedCallback;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
+import androidx.core.content.res.ResourcesCompat;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.appcompat.app.AlertDialog;
@@ -49,11 +53,11 @@ import com.example.focuspet.model.FocusPetModels.Currency;
 
 public class MainActivity extends AppCompatActivity {
     private static final int NOTIFICATION_REQUEST = 7;
-    private static final int PURPLE = Color.rgb(108, 80, 174);
-    private static final int PURPLE_DARK = Color.rgb(82, 57, 145);
-    private static final int SURFACE = Color.rgb(255, 248, 255);
-    private static final int CARD = Color.rgb(232, 226, 234);
-    private static final int LAVENDER = Color.rgb(238, 224, 255);
+    private int purple;
+    private int purpleDark;
+    private int surface;
+    private int lavender;
+    private Typeface pixelFont;
     private FocusStore store;
     private FocusRepository repository;
     private LinearLayout content;
@@ -72,9 +76,15 @@ public class MainActivity extends AppCompatActivity {
         }
     };
     private final List<LinearLayout> navigationItems = new ArrayList<>();
+    private final List<ImageView> navigationIcons = new ArrayList<>();
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
+        purple = ContextCompat.getColor(this, R.color.button_primary);
+        purpleDark = ContextCompat.getColor(this, R.color.button_primary_pressed);
+        surface = ContextCompat.getColor(this, R.color.background_app);
+        lavender = ContextCompat.getColor(this, R.color.background_accent);
+        pixelFont = ResourcesCompat.getFont(this, R.font.fusion_pixel_10px_monospaced_latin);
         store = new FocusStore(this);
         repository = new FocusRepository(this);
         repository.ensureStarterPet();
@@ -118,7 +128,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void buildShell() {
         FrameLayout root = new FrameLayout(this);
-        root.setBackgroundColor(SURFACE);
+        root.setBackgroundColor(surface);
         ViewCompat.setOnApplyWindowInsetsListener(root, (view, insets) -> {
             int topInset = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top;
             view.setPadding(0, topInset, 0, 0);
@@ -128,12 +138,14 @@ public class MainActivity extends AppCompatActivity {
         shell.setOrientation(LinearLayout.VERTICAL);
         LinearLayout header = new LinearLayout(this);
         header.setGravity(Gravity.CENTER_VERTICAL);
-        title = text("Focus Grove", 25, Color.rgb(35, 29, 38));
-        title.setTypeface(null, Typeface.BOLD);
+        title = text("Focus Grove", 25, ContextCompat.getColor(this, R.color.text_primary));
+        title.setTextAppearance(R.style.TextAppearance_FocusPet_Title);
         title.setPadding(dp(12), dp(22), dp(8), dp(18));
-        header.setBackgroundColor(SURFACE);
-        TextView iconPlaceholder = text("✦", 20, PURPLE_DARK);
-        iconPlaceholder.setBackground(roundColor(LAVENDER, 16));
+        header.setBackgroundColor(
+                ContextCompat.getColor(this, R.color.background_app));
+        TextView iconPlaceholder = text("✦", 20,
+                ContextCompat.getColor(this, R.color.text_primary));
+        iconPlaceholder.setBackground(roundColor(lavender, 16));
         iconPlaceholder.setGravity(Gravity.CENTER);
         iconPlaceholder.setContentDescription("App icon placeholder");
         LinearLayout.LayoutParams iconParams = new LinearLayout.LayoutParams(dp(48), dp(48));
@@ -150,16 +162,17 @@ public class MainActivity extends AppCompatActivity {
         shell.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
         navigation = new LinearLayout(this);
         navigation.setGravity(Gravity.CENTER);
-        navigation.setBackgroundColor(Color.rgb(248, 241, 250));
-        addNavigationButton(navigation, "🏠", "Focus", v -> showHome());
-        addNavigationButton(navigation, "🐾", "Collection", v -> showCollection());
-        addNavigationButton(navigation, "📊", "Statistics", v -> showStats());
-        addNavigationButton(navigation, "⚙️", "Settings", v -> showSettings());
+        navigation.setBackgroundColor(
+                ContextCompat.getColor(this, R.color.background_accent));
+        addNavigationButton(navigation, R.drawable.icon_home, "Focus", v -> showHome());
+        addNavigationButton(navigation, R.drawable.icon_collection, "Collection", v -> showCollection());
+        addNavigationButton(navigation, R.drawable.icon_statistics, "Statistics", v -> showStats());
+        addNavigationButton(navigation, R.drawable.icon_settings, "Settings", v -> showSettings());
         navigation.setPadding(dp(4), dp(6), dp(4), dp(6));
         shell.addView(navigation, new LinearLayout.LayoutParams(-1, dp(92)));
         root.addView(shell, new FrameLayout.LayoutParams(-1, -1));
         if (BuildConfig.DEBUG) {
-            debugButton = text("⚙", 22, Color.WHITE);
+            debugButton = text("⚙", 22, ContextCompat.getColor(this, R.color.text_primary));
             debugButton.setGravity(Gravity.CENTER);
             debugButton.setBackgroundResource(R.drawable.bg_focuspet_debug_button);
             debugButton.setContentDescription("Development resource controls");
@@ -182,7 +195,7 @@ public class MainActivity extends AppCompatActivity {
         LinearLayout panel = new LinearLayout(this);
         panel.setOrientation(LinearLayout.VERTICAL);
         panel.setPadding(dp(20), dp(4), dp(20), 0);
-        panel.addView(text("Presets", 15, PURPLE_DARK));
+        panel.addView(text("Presets", 15, purpleDark));
         LinearLayout presets = new LinearLayout(this);
         presets.setGravity(Gravity.CENTER);
         addDebugPreset(presets, "+10", 10);
@@ -210,7 +223,7 @@ public class MainActivity extends AppCompatActivity {
             store.addDebugResources(amount, amount, amount);
             recreate();
         });
-        preset.setTextSize(13);
+        preset.setTextAppearance(R.style.TextAppearance_FocusPet_Caption);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(44), 1);
         params.setMargins(dp(3), dp(3), dp(3), dp(3));
         parent.addView(preset, params);
@@ -232,22 +245,28 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void addNavigationButton(LinearLayout navigation, String icon, String label,
+    private void addNavigationButton(LinearLayout navigation, int iconResource, String label,
                                      View.OnClickListener listener) {
         LinearLayout item = new LinearLayout(this);
         item.setOrientation(LinearLayout.VERTICAL);
         item.setGravity(Gravity.CENTER);
-        TextView iconView = text(icon, 19, Color.rgb(45, 39, 50));
-        iconView.setPadding(0, 0, 0, 0);
-        iconView.setGravity(Gravity.CENTER);
-        TextView labelView = text(label, 14, Color.rgb(45, 39, 50));
+        ImageView iconView = new ImageView(this);
+        iconView.setImageResource(iconResource);
+        iconView.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        iconView.setColorFilter(ContextCompat.getColor(this, R.color.text_primary));
+        iconView.setAdjustViewBounds(true);
+        TextView labelView = text(label, 14, ContextCompat.getColor(this, R.color.text_primary));
         labelView.setPadding(0, 0, 0, 0);
         labelView.setGravity(Gravity.CENTER);
-        item.addView(iconView, new LinearLayout.LayoutParams(-1, dp(25)));
+        item.addView(iconView, new LinearLayout.LayoutParams(dp(26), dp(26)));
         item.addView(labelView, new LinearLayout.LayoutParams(-1, dp(26)));
-        item.setBackground(statefulBackground(Color.TRANSPARENT, LAVENDER, Color.LTGRAY));
+        item.setBackground(statefulBackground(
+                ContextCompat.getColor(this, android.R.color.transparent),
+                lavender,
+                ContextCompat.getColor(this, android.R.color.darker_gray)));
         item.setOnClickListener(listener);
         navigationItems.add(item);
+        navigationIcons.add(iconView);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, -1, 1);
         params.setMargins(dp(5), dp(2), dp(5), dp(2));
         navigation.addView(item, params);
@@ -255,7 +274,10 @@ public class MainActivity extends AppCompatActivity {
 
     private void setActiveTab(int index) {
         for (int i = 0; i < navigationItems.size(); i++) {
-            navigationItems.get(i).setBackground(roundColor(i == index ? LAVENDER : Color.TRANSPARENT, 28));
+            navigationItems.get(i).setBackground(roundColor(i == index ? lavender
+                    : ContextCompat.getColor(this, android.R.color.transparent), 28));
+            navigationIcons.get(i).setColorFilter(ContextCompat.getColor(
+                    this, i == index ? R.color.text_primary : R.color.text_secondary));
         }
     }
 
@@ -272,7 +294,7 @@ public class MainActivity extends AppCompatActivity {
 
     private GradientDrawable outline(int color, int width, int radius) {
         GradientDrawable drawable = new GradientDrawable();
-        drawable.setColor(Color.TRANSPARENT);
+        drawable.setColor(ContextCompat.getColor(this, android.R.color.transparent));
         drawable.setStroke(dp(width), color);
         drawable.setCornerRadius(dp(radius));
         return drawable;
@@ -289,24 +311,52 @@ public class MainActivity extends AppCompatActivity {
     private TextView text(String value, int size, int color) {
         TextView view = new TextView(this);
         view.setText(value);
-        view.setTextSize(size);
+        view.setTextSize(TypedValue.COMPLEX_UNIT_PX, textSizeResource(size));
         view.setTextColor(color);
+        view.setTypeface(pixelFont);
         view.setPadding(dp(12), dp(8), dp(12), dp(8));
         return view;
+    }
+
+    private float textSizeResource(int size) {
+        int resourceId;
+        switch (size) {
+            case 13: resourceId = R.dimen.text_size_13; break;
+            case 14: resourceId = R.dimen.text_size_14; break;
+            case 15: resourceId = R.dimen.text_size_15; break;
+            case 16: resourceId = R.dimen.text_size_16; break;
+            case 17: resourceId = R.dimen.text_size_17; break;
+            case 18: resourceId = R.dimen.text_size_18; break;
+            case 19: resourceId = R.dimen.text_size_19; break;
+            case 20: resourceId = R.dimen.text_size_20; break;
+            case 22: resourceId = R.dimen.text_size_22; break;
+            case 24: resourceId = R.dimen.text_size_24; break;
+            case 25: resourceId = R.dimen.focuspet_title_text; break;
+            case 28: resourceId = R.dimen.text_size_28; break;
+            case 64: resourceId = R.dimen.text_size_64; break;
+            default: return getResources().getDimension(R.dimen.text_size_16);
+        }
+        return getResources().getDimension(resourceId);
     }
 
     private Button button(String label, View.OnClickListener listener) {
         Button button = new Button(this);
         button.setText(label);
-        button.setTextColor(Color.WHITE);
-        button.setTextSize(14);
+        button.setTextAppearance(R.style.Widget_FocusPet_PrimaryButton);
         button.setAllCaps(false);
-        button.setTypeface(null, Typeface.BOLD);
-        button.setMinHeight(dp(48));
+        button.setMinHeight((int) getResources().getDimension(R.dimen.focuspet_compact_button_height));
         button.setPadding(dp(16), 0, dp(16), 0);
-        button.setBackground(statefulBackground(PURPLE, PURPLE_DARK, Color.rgb(190, 190, 190)));
+        button.setBackground(statefulBackground(
+                ContextCompat.getColor(this, R.color.button_primary),
+                ContextCompat.getColor(this, R.color.button_primary_pressed),
+                ContextCompat.getColor(this, R.color.button_primary_disabled)));
+        button.setTextColor(ContextCompat.getColor(this, R.color.text_on_button));
+        button.setTypeface(pixelFont);
+        button.setTextSize(TypedValue.COMPLEX_UNIT_PX,
+                getResources().getDimension(R.dimen.text_size_18));
         button.setOnClickListener(listener);
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, dp(64));
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1,
+                (int) getResources().getDimension(R.dimen.focuspet_button_height));
         params.setMargins(0, dp(18), 0, dp(5));
         button.setLayoutParams(params);
         return button;
@@ -315,12 +365,11 @@ public class MainActivity extends AppCompatActivity {
     private Button outlineButton(String label, View.OnClickListener listener) {
         Button button = new Button(this);
         button.setText(label);
-        button.setTextColor(Color.rgb(65, 58, 70));
-        button.setTextSize(15);
+        button.setTextAppearance(R.style.Widget_FocusPet_OutlineButton);
         button.setAllCaps(false);
-        button.setTypeface(null, Typeface.BOLD);
         button.setMinHeight(dp(48));
-        button.setBackground(statefulOutline(Color.rgb(190, 179, 198), PURPLE, 28));
+        button.setBackground(statefulOutline(
+                ContextCompat.getColor(this, R.color.button_outline), purple, 28));
         button.setOnClickListener(listener);
         return button;
     }
@@ -348,15 +397,15 @@ public class MainActivity extends AppCompatActivity {
         reset("Focus Grove");
         setSessionLock(false);
         setActiveTab(0);
-        content.addView(text("Start a session with your pets today! ", 18, Color.rgb(35, 29, 38)));
+        content.addView(text("Start a session with your pets today! ", 18, ContextCompat.getColor(this, R.color.text_primary)));
         View companion = companionCard();
         companion.setOnClickListener(v -> showCompanionChooser());
         content.addView(companion);
-        TextView today = text("Today", 20, PURPLE_DARK);
-        today.setTypeface(null, Typeface.BOLD);
+        TextView today = text("Today", 20, purpleDark);
+        today.setTextAppearance(R.style.TextAppearance_FocusPet_Title);
         today.setPadding(dp(0), dp(24), dp(0), dp(0));
         content.addView(today);
-        content.addView(text(store.todayMinutes() + " min focused", 28, Color.rgb(35, 29, 38)));
+        content.addView(text(store.todayMinutes() + " min focused", 28, ContextCompat.getColor(this, R.color.text_primary)));
 
         int todayMinutes = store.todayMinutes();
         int goal = store.dailyGoal();
@@ -364,39 +413,39 @@ public class MainActivity extends AppCompatActivity {
         ProgressBar goalProgress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
         goalProgress.setMax(goal);
         goalProgress.setProgress(Math.min(todayMinutes, goal));
-        goalProgress.setProgressTintList(android.content.res.ColorStateList.valueOf(PURPLE));
-        goalProgress.setProgressBackgroundTintList(android.content.res.ColorStateList.valueOf(LAVENDER));
+        goalProgress.setProgressTintList(android.content.res.ColorStateList.valueOf(purple));
+        goalProgress.setProgressBackgroundTintList(android.content.res.ColorStateList.valueOf(lavender));
         LinearLayout.LayoutParams goalProgressParams = new LinearLayout.LayoutParams(-1, dp(12));
         goalProgressParams.setMargins(0, dp(8), 0, dp(4));
         content.addView(goalProgress, goalProgressParams);
         content.addView(text(remaining == 0
-                ? "Daily goal reached — nice work today!"
+                ? "Daily goal reached? nice work today!"
                 : remaining + " min to reach your " + goal + "-min daily goal",
-                14, Color.rgb(75, 67, 80)));
+                14, ContextCompat.getColor(this, R.color.text_secondary)));
 
         content.addView(text(store.sessions() + " sessions completed.  Keep showing up!",
-                16, Color.rgb(45, 39, 50)));
+                16, ContextCompat.getColor(this, R.color.text_primary)));
         content.addView(button("Start focus", v -> showSetup()));
 
-        TextView recentTitle = text("Recent Sessions", 20, PURPLE_DARK);
-        recentTitle.setTypeface(null, Typeface.BOLD);
+        TextView recentTitle = text("Recent Sessions", 20, purpleDark);
+        recentTitle.setTextAppearance(R.style.TextAppearance_FocusPet_Title);
         recentTitle.setPadding(0, dp(24), 0, dp(8));
         content.addView(recentTitle);
 
         List<FocusSession> recent = repository.recentHistory(3);
         if (recent.isEmpty()) {
             content.addView(text("No sessions yet. Your recent focus sessions will appear here.",
-                    16, Color.DKGRAY));
+                    16, ContextCompat.getColor(this, R.color.text_secondary)));
         } else {
             for (FocusSession session : recent) {
                 addHistoryRow(content, session);
             }
         }
 
-        TextView moreCard = text("More...", 15, PURPLE_DARK);
+        TextView moreCard = text("More...", 15, purpleDark);
         moreCard.setBackgroundResource(R.drawable.bg_focuspet_card);
         moreCard.setGravity(Gravity.CENTER);
-        moreCard.setTypeface(null, Typeface.BOLD);
+        moreCard.setTextAppearance(R.style.TextAppearance_FocusPet_Title);
         moreCard.setPadding(dp(12), dp(14), dp(12), dp(14));
         LinearLayout.LayoutParams moreParams = new LinearLayout.LayoutParams(-1, -2);
         moreParams.setMargins(0, dp(12), 0, dp(8));
@@ -425,51 +474,51 @@ public class MainActivity extends AppCompatActivity {
         reset("Focus setup");
         setSessionLock(false);
         setActiveTab(0);
-        TextView back = text("‹  Back", 16, PURPLE_DARK);
-        back.setTypeface(null, Typeface.BOLD);
+        TextView back = text("Back", 16, purpleDark);
+        back.setTextAppearance(R.style.TextAppearance_FocusPet_Title);
         back.setPadding(0, dp(8), 0, dp(18));
         back.setOnClickListener(v -> showHome());
         content.addView(back);
 
-        TextView nameLabel = text("What are you focusing on? (optional)", 14, Color.rgb(75, 67, 80));
+        TextView nameLabel = text("What are you focusing on? (optional)", 14, ContextCompat.getColor(this, R.color.text_secondary));
         nameLabel.setPadding(0, 0, 0, dp(4));
         content.addView(nameLabel);
 
         EditText sessionNameInput = new EditText(this);
         sessionNameInput.setHint("e.g. math homework");
         sessionNameInput.setInputType(InputType.TYPE_CLASS_TEXT);
-        sessionNameInput.setTextSize(18);
+        sessionNameInput.setTextAppearance(R.style.TextAppearance_FocusPet_Input);
         sessionNameInput.setSingleLine(true);
         sessionNameInput.setGravity(Gravity.CENTER_VERTICAL);
         sessionNameInput.setPadding(dp(16), 0, dp(16), 0);
-        sessionNameInput.setBackground(outline(Color.rgb(110, 102, 115), 1, 8));
+        sessionNameInput.setBackground(outline(ContextCompat.getColor(this, R.color.text_secondary), 1, 8));
         sessionNameInput.setFilters(new android.text.InputFilter[] {
                 new android.text.InputFilter.LengthFilter(60) });
         LinearLayout.LayoutParams nameParams = new LinearLayout.LayoutParams(-1, dp(72));
         nameParams.setMargins(0, 0, 0, dp(4));
         content.addView(sessionNameInput, nameParams);
-        TextView nameHint = text("Leave blank and we'll call it a Focus session.", 14, Color.DKGRAY);
+        TextView nameHint = text("Leave blank and we'll call it a Focus session.", 14, ContextCompat.getColor(this, R.color.text_secondary));
         nameHint.setPadding(dp(16), dp(2), dp(16), dp(12));
         content.addView(nameHint, new LinearLayout.LayoutParams(-1, -2));
 
-        content.addView(text("How long would you like to focus?", 19, Color.rgb(35, 29, 38)));
+        content.addView(text("How long would you like to focus?", 19, ContextCompat.getColor(this, R.color.text_primary)));
 
-        TextView customLabel = text("Custom focus time (minutes)", 14, Color.rgb(75, 67, 80));
+        TextView customLabel = text("Custom focus time (minutes)", 14, ContextCompat.getColor(this, R.color.text_secondary));
         customLabel.setPadding(dp(16), dp(18), dp(16), dp(4));
         content.addView(customLabel);
 
         EditText customDuration = new EditText(this);
         customDuration.setText("25");
         customDuration.setInputType(InputType.TYPE_CLASS_NUMBER);
-        customDuration.setTextSize(18);
+        customDuration.setTextAppearance(R.style.TextAppearance_FocusPet_Input);
         customDuration.setSingleLine(true);
         customDuration.setGravity(Gravity.CENTER_VERTICAL);
         customDuration.setPadding(dp(16), 0, dp(16), 0);
-        customDuration.setBackground(outline(Color.rgb(110, 102, 115), 1, 8));
+        customDuration.setBackground(outline(ContextCompat.getColor(this, R.color.text_secondary), 1, 8));
         LinearLayout.LayoutParams inputParams = new LinearLayout.LayoutParams(-1, dp(72));
         inputParams.setMargins(0, 0, 0, dp(4));
         content.addView(customDuration, inputParams);
-        TextView hint = text("Choose any whole number from 1 to 240 minutes.", 14, Color.DKGRAY);
+        TextView hint = text("Choose any whole number from 1 to 240 minutes.", 14, ContextCompat.getColor(this, R.color.text_secondary));
         hint.setPadding(dp(16), dp(2), dp(16), dp(12));
         content.addView(hint, new LinearLayout.LayoutParams(-1, -2));
 
@@ -478,7 +527,7 @@ public class MainActivity extends AppCompatActivity {
         int[] presetValues = {15, 25, 45, 60};
         for (int value : presetValues) {
             Button preset = outlineButton(value + " min", v -> customDuration.setText(String.valueOf(value)));
-            preset.setTextSize(14);
+            preset.setTextAppearance(R.style.TextAppearance_FocusPet_Caption);
             LinearLayout.LayoutParams presetParams = new LinearLayout.LayoutParams(0, dp(48), 1);
             presetParams.setMargins(dp(4), dp(4), dp(4), dp(4));
             presets.addView(preset, presetParams);
@@ -517,17 +566,17 @@ public class MainActivity extends AppCompatActivity {
         boolean hasName = label != null && !label.trim().isEmpty();
         String displayName = displayLabel(label);
         if (hasName) {
-            TextView nameCaption = text("FOCUSING ON", 13, PURPLE);
-            nameCaption.setTypeface(null, Typeface.BOLD);
+            TextView nameCaption = text("FOCUSING ON", 13, purple);
+            nameCaption.setTextAppearance(R.style.TextAppearance_FocusPet_Title);
             nameCaption.setGravity(Gravity.CENTER);
             nameCaption.setPadding(0, dp(24), 0, dp(4));
             content.addView(nameCaption);
-            TextView nameValue = text(displayName, 22, PURPLE_DARK);
-            nameValue.setTypeface(null, Typeface.BOLD);
+            TextView nameValue = text(displayName, 22, purpleDark);
+            nameValue.setTextAppearance(R.style.TextAppearance_FocusPet_Title);
             nameValue.setGravity(Gravity.CENTER);
             content.addView(nameValue);
         }
-        TextView timer = text("Loading...", 64, Color.rgb(35, 29, 38));
+        TextView timer = text("Loading...", 64, ContextCompat.getColor(this, R.color.text_primary));
         timer.setGravity(Gravity.CENTER);
         timer.setPadding(0, hasName ? dp(24) : dp(64), 0, dp(18));
         content.addView(timer);
@@ -538,12 +587,12 @@ public class MainActivity extends AppCompatActivity {
         int initialPercent = (int) Math.max(0L, Math.min(100L,
                 Math.round(((double) (totalMillis - remainingAtOpen) / totalMillis) * 100)));
         progress.setProgress(initialPercent);
-        progress.setProgressTintList(android.content.res.ColorStateList.valueOf(PURPLE));
-        progress.setProgressBackgroundTintList(android.content.res.ColorStateList.valueOf(LAVENDER));
+        progress.setProgressTintList(android.content.res.ColorStateList.valueOf(purple));
+        progress.setProgressBackgroundTintList(android.content.res.ColorStateList.valueOf(lavender));
         content.addView(progress, new LinearLayout.LayoutParams(-1, dp(12)));
         Pet companion = repository.selectedPet();
         TextView encouragement = text((companion == null ? "Your pet" : companion.name)
-                + " is cheering you on.", 19, Color.rgb(35, 29, 38));
+                + " is cheering you on.", 19, ContextCompat.getColor(this, R.color.text_primary));
         encouragement.setGravity(Gravity.CENTER);
         encouragement.setPadding(0, dp(24), 0, dp(28));
         content.addView(encouragement);
@@ -607,7 +656,7 @@ public class MainActivity extends AppCompatActivity {
     private void showFinalEndWarning() {
         new AlertDialog.Builder(this)
                 .setTitle("Really end your session early?")
-                .setMessage("Sessions under 4 focused minutes may count as 0 minutes toward your goal. This cannot be undone — do you still want to end now?")
+                .setMessage("Sessions under 4 focused minutes may count as 0 minutes toward your goal. This cannot be undone. Do you still want to end now?")
                 .setNegativeButton("No, keep focusing", null)
                 .setPositiveButton("Yes, end anyway", (dialog, which) ->
                         sendService(FocusService.ACTION_CANCEL))
@@ -638,15 +687,15 @@ public class MainActivity extends AppCompatActivity {
         setActiveTab(0);
         content.addView(imagePlaceholder("SESSION CELEBRATION"));
         TextView finishName = text(displayLabel(finished == null ? "" : finished.label),
-                22, PURPLE_DARK);
-        finishName.setTypeface(null, Typeface.BOLD);
+                22, purpleDark);
+        finishName.setTextAppearance(R.style.TextAppearance_FocusPet_Title);
         finishName.setGravity(Gravity.CENTER);
         finishName.setPadding(0, dp(8), 0, dp(8));
         content.addView(finishName);
-        content.addView(text("🌟 Great work, your pet is proud.", 24, Color.rgb(74, 55, 95)));
+        content.addView(text("★ Great work, your pet is proud.", 24, ContextCompat.getColor(this, R.color.text_primary)));
         content.addView(text(minutes + " minutes focused\n"
                 + (endedEarly ? "Partial rewards are ready to claim." : "Your rewards are ready to claim."),
-                20, Color.DKGRAY));
+                20, ContextCompat.getColor(this, R.color.text_secondary)));
         content.addView(button("Continue to claim", v -> showClaim(sessionId)));
     }
 
@@ -660,17 +709,17 @@ public class MainActivity extends AppCompatActivity {
         setSessionLock(true);
         setActiveTab(0);
         content.addView(imagePlaceholder("REWARD ANIMATION"));
-        TextView claimName = text(displayLabel(session.label), 22, PURPLE_DARK);
-        claimName.setTypeface(null, Typeface.BOLD);
+        TextView claimName = text(displayLabel(session.label), 22, purpleDark);
+        claimName.setTextAppearance(R.style.TextAppearance_FocusPet_Title);
         claimName.setGravity(Gravity.CENTER);
         claimName.setPadding(0, dp(8), 0, dp(8));
         content.addView(claimName);
-        content.addView(text("Your session rewards", 24, Color.rgb(74, 55, 95)));
-        content.addView(text("⭐ +" + session.xpReward + " XP\n"
-                + "🪙 +" + session.coinReward + " coins\n"
-                + "✨ +" + session.essenceReward + " Life Essence\n"
-                + (session.eggReward ? "🥚 Pet Egg found!" : "No Pet Egg this time"),
-                20, Color.DKGRAY));
+        content.addView(text("Your session rewards", 24, ContextCompat.getColor(this, R.color.text_primary)));
+        content.addView(text("★ +" + session.xpReward + " XP\n"
+                + "● +" + session.coinReward + " coins\n"
+                + "✦ +" + session.essenceReward + " Life Essence\n"
+                + (session.eggReward ? "Pet Egg found!" : "No Pet Egg this time"),
+                20, ContextCompat.getColor(this, R.color.text_secondary)));
         content.addView(button("Claim rewards", v -> {
             if (repository.claimRewards(sessionId)) {
                 showHome();
@@ -679,9 +728,9 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private TextView imagePlaceholder(String label) {
-        TextView placeholder = text("🐾\n" + label, 22, Color.rgb(112, 90, 145));
+        TextView placeholder = text("🐾\n" + label, 22, ContextCompat.getColor(this, R.color.text_primary));
         placeholder.setGravity(Gravity.CENTER);
-        placeholder.setBackground(roundColor(Color.rgb(239, 233, 250), 16));
+        placeholder.setBackground(roundColor(ContextCompat.getColor(this, R.color.background_card), 16));
         placeholder.setContentDescription("Reserved space for " + label.toLowerCase(Locale.US));
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, dp(140));
         params.setMargins(dp(8), dp(8), dp(8), dp(8));
@@ -697,14 +746,14 @@ public class MainActivity extends AppCompatActivity {
         content.addView(screen);
 
         LinearLayout resourceBar = screen.findViewById(R.id.resource_bar);
-        addResourceChip(resourceBar, "🪙\nCoins\n" + store.coins(), "Coins",
+        addResourceChip(resourceBar, "●\nCoins\n" + store.coins(), "Coins",
                 "You have " + store.coins() + " Coins.\n"
                         + "Earned by completing focus sessions. Spend them on clothing and decorations in the Shop.");
-        addResourceChip(resourceBar, "✨\nEssence\n" + store.lifeEssence(), "Life Essence",
+        addResourceChip(resourceBar, "✦\nEssence\n" + store.lifeEssence(), "Life Essence",
                 "You have " + store.lifeEssence() + " Life Essence.\n"
                         + "Earned through focus. Hatching one Pet Egg costs 100 Essence. "
                         + "Pet Eggs drop from focus sessions over time.");
-        addResourceChip(resourceBar, "🥚  Eggs  " + store.petEggs(), "Pet Eggs", null);
+        addResourceChip(resourceBar, "Eggs  " + store.petEggs(), "Pet Eggs", null);
         Button shop = button("Shop", v -> showShop());
         shop.setId(R.id.open_shop);
         screen.addView(shop, 1);
@@ -714,9 +763,9 @@ public class MainActivity extends AppCompatActivity {
         for (Pet pet : repository.pets()) {
             View card = LayoutInflater.from(this).inflate(R.layout.item_pet_card, ownedPets, false);
             configurePetCard(card, pet.name + " the " + pet.species,
-                    pet.rarity + "  •  Level " + pet.level(),
+                    pet.rarity + " - Level " + pet.level(),
                     pet.id == (selected == null ? -1 : selected.id)
-                            ? "Selected companion  •  Tap for details" : "Tap for details",
+                            ? "Selected companion - Tap for details" : "Tap for details",
                     pet.experience % 100, 1f, v -> showPetDetail(pet));
             ownedPets.addView(card);
         }
@@ -776,8 +825,8 @@ public class MainActivity extends AppCompatActivity {
                         + "\nWearing: " + equippedSummary(pet.id));
         long petId = pet.id;
         LinearLayout actions = screen.findViewById(R.id.pet_detail_actions);
-        actions.addView(text("Interact with your pet", 17, PURPLE_DARK));
-        TextView feedback = text("Give your pet a short break between interactions.", 14, Color.DKGRAY);
+        actions.addView(text("Interact with your pet", 17, purpleDark));
+        TextView feedback = text("Give your pet a short break between interactions.", 14, ContextCompat.getColor(this, R.color.text_secondary));
         feedback.setId(R.id.pet_interaction_feedback);
         actions.addView(feedback);
         addInteraction(actions, screen, petId, "Pet", R.id.pet_interaction_pet, PetInteraction.Action.PET, feedback);
@@ -825,8 +874,15 @@ public class MainActivity extends AppCompatActivity {
     private void setAvailable(Button button, boolean available) {
         button.setEnabled(available);
         button.setBackgroundTintList(android.content.res.ColorStateList.valueOf(
-                available ? PURPLE : Color.rgb(218, 218, 218)));
-        button.setTextColor(available ? Color.WHITE : Color.rgb(105, 105, 105));
+                available
+                        ? ContextCompat.getColor(this, R.color.button_primary)
+                        : ContextCompat.getColor(this, R.color.button_primary_disabled)));
+        button.setTextColor(available
+                ? ContextCompat.getColor(this, R.color.text_on_button)
+                : ContextCompat.getColor(this, R.color.text_secondary));
+        button.setTypeface(pixelFont);
+        button.setTextSize(TypedValue.COMPLEX_UNIT_PX,
+                getResources().getDimension(R.dimen.text_size_18));
     }
 
     private String equippedSummary(long petId) {
@@ -861,7 +917,7 @@ public class MainActivity extends AppCompatActivity {
         content.addView(screen);
         ((TextView) screen.findViewById(R.id.hatch_result_name)).setText(pet.name + " the " + pet.species);
         ((TextView) screen.findViewById(R.id.hatch_result_meta)).setText(
-                "Hatched successfully\n" + pet.rarity + "  •  Level " + pet.level());
+                "Hatched successfully\n" + pet.rarity + " - Level " + pet.level());
         bindPetAnimation(screen.findViewById(R.id.pet_animation_container), pet);
         LinearLayout actions = screen.findViewById(R.id.hatch_result_actions);
         Button select = button("Choose as companion", v -> {
@@ -875,8 +931,8 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private String petDetailMeta(Pet pet) {
-        return pet.rarity + " companion" + (pet.selected ? "  •  Selected" : "")
-                + "\nLevel " + pet.level() + "  •  " + pet.experience + " XP"
+        return pet.rarity + " companion" + (pet.selected ? " - Selected" : "")
+                + "\nLevel " + pet.level() + " - " + pet.experience + " XP"
                 + "\nMood / energy: " + pet.mood + " / " + pet.energy;
     }
 
@@ -908,26 +964,26 @@ public class MainActivity extends AppCompatActivity {
         setActiveTab(1);
         content.addView(outlineButton("Back to collection", v -> showCollection()));
         TextView balance = text("Coins: " + store.coins() + "\nEssence: " + store.lifeEssence()
-                + "\nPet Eggs: " + store.petEggs(), 18, Color.DKGRAY);
+                + "\nPet Eggs: " + store.petEggs(), 18, ContextCompat.getColor(this, R.color.text_secondary));
         balance.setId(R.id.shop_balance);
         content.addView(balance);
         content.addView(text("Coins buy clothing and decorations.\n"
-                + "Pet Eggs drop from focus sessions. Hatching costs one egg and 100 Essence.", 15, Color.DKGRAY));
+                + "Pet Eggs drop from focus sessions. Hatching costs one egg and 100 Essence.", 15, ContextCompat.getColor(this, R.color.text_secondary)));
         for (ShopProduct product : ShopCatalog.PRODUCTS) {
             LinearLayout row = new LinearLayout(this);
             row.setOrientation(LinearLayout.VERTICAL);
-            row.addView(text(product.name, 19, PURPLE_DARK));
+            row.addView(text(product.name, 19, purpleDark));
             boolean cosmetic = product.productType == ProductType.COSMETIC;
             boolean owned = cosmetic && store.ownedCosmeticIds().contains(product.itemKey);
             String currency = product.currency == Currency.COINS ? "Coins" : "Essence";
             boolean enough = (product.currency == Currency.COINS ? store.coins() : store.lifeEssence()) >= product.price;
-            String label = owned ? "Owned" : enough ? "Buy — " + product.price + " " + currency
+            String label = owned ? "Owned" : enough ? "Buy " + product.price + " " + currency
                     : "Need " + product.price + " " + currency;
             Button buy = button(label, v -> confirmPurchase(product));
             buy.setTag("buy_" + product.id);
             setAvailable(buy, !owned && enough);
             row.addView(buy);
-            if (cosmetic) row.addView(text("Permanently unlocked for your pets.", 14, Color.DKGRAY));
+            if (cosmetic) row.addView(text("Permanently unlocked for your pets.", 14, ContextCompat.getColor(this, R.color.text_secondary)));
             content.addView(row);
         }
         Pet selected = repository.selectedPet();
@@ -955,12 +1011,12 @@ public class MainActivity extends AppCompatActivity {
         reset("Customize " + pet.name);
         setActiveTab(1);
         content.addView(outlineButton("Back to pet", v -> showPetDetail(pet)));
-        content.addView(text("Wearing: " + equippedSummary(petId), 17, Color.DKGRAY));
+        content.addView(text("Wearing: " + equippedSummary(petId), 17, ContextCompat.getColor(this, R.color.text_secondary)));
         boolean hasItems = false;
         for (CosmeticItem item : ShopCatalog.COSMETICS) {
             if (!store.ownedCosmeticIds().contains(item.id)) continue;
             hasItems = true;
-            content.addView(text(item.name, 18, PURPLE_DARK));
+            content.addView(text(item.name, 18, purpleDark));
             boolean equipped = item.id.equals(store.equippedItemId(petId, item.slotKey));
             Button toggle = button(equipped ? "Remove " + item.name : "Equip " + item.name, v -> {
                 if (equipped) store.unequip(petId, item.slotKey);
@@ -970,7 +1026,7 @@ public class MainActivity extends AppCompatActivity {
             toggle.setTag("equip_" + item.id);
             content.addView(toggle);
         }
-        if (!hasItems) content.addView(text("Buy clothing and decorations in the shop to customize your pet.", 16, Color.DKGRAY));
+        if (!hasItems) content.addView(text("Buy clothing and decorations in the shop to customize your pet.", 16, ContextCompat.getColor(this, R.color.text_secondary)));
         content.addView(button("Shop", v -> showShop()));
     }
 
@@ -986,9 +1042,9 @@ public class MainActivity extends AppCompatActivity {
                 for (Pet pet : repository.pets()) {
                     View card = LayoutInflater.from(this).inflate(R.layout.item_pet_card, container, false);
                     configurePetCard(card, pet.name + " the " + pet.species,
-                            pet.rarity + "  •  Level " + pet.level(),
+                            pet.rarity + " - Level " + pet.level(),
                             pet.id == (selected == null ? -1 : selected.id)
-                                    ? "Selected companion  •  Tap to keep" : "Tap to select",
+                                    ? "Selected companion - Tap to keep" : "Tap to select",
                             pet.experience % 100, 1f, v -> {
                                 repository.selectPet(pet.id);
                                 showHome();
@@ -1020,7 +1076,7 @@ public class MainActivity extends AppCompatActivity {
         List<FocusSession> history = repository.history();
         if (history.isEmpty()) {
             TextView empty = text("No focus sessions yet. Complete your first session to see it here.",
-                    16, Color.DKGRAY);
+                    16, ContextCompat.getColor(this, R.color.text_secondary));
             empty.setPadding(0, dp(8), 0, dp(12));
             historyContainer.addView(empty);
         } else {
@@ -1048,7 +1104,7 @@ public class MainActivity extends AppCompatActivity {
         TextView labelView = row.findViewById(R.id.history_label);
         labelView.setMaxLines(1);
         labelView.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        labelView.setText(label + "  •  " + status);
+        labelView.setText(label + " - " + status);
         String date = new SimpleDateFormat("MMM d, yyyy  h:mm a", Locale.US)
                 .format(new Date(session.startedAt));
         TextView dateView = row.findViewById(R.id.history_date);
@@ -1075,7 +1131,7 @@ public class MainActivity extends AppCompatActivity {
                 : "Reward pending";
         ((TextView) screen.findViewById(R.id.history_detail_title)).setText(label);
         ((TextView) screen.findViewById(R.id.history_detail_status)).setText(
-                status + "  •  " + session.actualMinutes + " minutes focused");
+                status + " - " + session.actualMinutes + " minutes focused");
 
         LinearLayout info = screen.findViewById(R.id.history_detail_info);
         addDetailLine(info, "Started",
@@ -1088,9 +1144,9 @@ public class MainActivity extends AppCompatActivity {
         addDetailLine(info, "Actual duration", session.actualMinutes + " minutes");
 
         String rewards = FocusSession.STATUS_CLAIMED.equals(session.status)
-                ? "Rewards claimed\n⭐ +" + session.xpReward + " XP\n🪙 +" + session.coinReward
-                + " coins\n✨ +" + session.essenceReward + " Life Essence"
-                + (session.eggReward ? "\n🥚 Pet Egg found" : "")
+                ? "Rewards claimed\n★ +" + session.xpReward + " XP\n● +" + session.coinReward
+                + " coins\n✦ +" + session.essenceReward + " Life Essence"
+                + (session.eggReward ? "\nPet Egg found" : "")
                 : FocusSession.STATUS_CANCELLED.equals(session.status)
                 ? "No completion rewards were granted for this session."
                 : "Rewards are waiting to be claimed.";
@@ -1098,8 +1154,9 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void addDetailLine(LinearLayout parent, String label, String value) {
-        TextView line = text(label + "\n" + value, 16, Color.rgb(75, 67, 80));
-        line.setPadding(0, dp(4), 0, dp(10));
+        TextView line = (TextView) LayoutInflater.from(this)
+                .inflate(R.layout.item_detail_line, parent, false);
+        line.setText(label + "\n" + value);
         parent.addView(line);
     }
 
@@ -1108,27 +1165,27 @@ public class MainActivity extends AppCompatActivity {
         setActiveTab(3);
         content.setPadding(dp(20), dp(8), dp(20), dp(100));
 
-        int sectionColor = Color.rgb(120, 112, 128);
-        int danger = Color.rgb(198, 40, 40);
-        int dangerDark = Color.rgb(150, 24, 24);
+        int sectionColor = ContextCompat.getColor(this, R.color.text_secondary);
+        int danger = ContextCompat.getColor(this, R.color.button_outline);
+        int dangerDark = ContextCompat.getColor(this, R.color.button_outline);
 
-        TextView focusGoalsHeader = text("Focus Goals", 20, PURPLE_DARK);
-        focusGoalsHeader.setTypeface(null, Typeface.BOLD);
+        TextView focusGoalsHeader = text("Focus Goals", 20, purpleDark);
+        focusGoalsHeader.setTextAppearance(R.style.TextAppearance_FocusPet_Title);
         focusGoalsHeader.setPadding(0, 0, 0, dp(8));
         content.addView(focusGoalsHeader);
 
-        TextView goalTitle = text("Daily Goal", 14, Color.rgb(45, 39, 50));
-        goalTitle.setTypeface(null, Typeface.BOLD);
+        TextView goalTitle = text("Daily Goal", 14, ContextCompat.getColor(this, R.color.text_primary));
+        goalTitle.setTextAppearance(R.style.TextAppearance_FocusPet_Title);
         goalTitle.setPadding(0, 0, 0, dp(2));
         content.addView(goalTitle);
         EditText goalInput = new EditText(this);
         goalInput.setText(String.valueOf(store.dailyGoal()));
         goalInput.setInputType(InputType.TYPE_CLASS_NUMBER);
-        goalInput.setTextSize(18);
+        goalInput.setTextAppearance(R.style.TextAppearance_FocusPet_Input);
         goalInput.setSingleLine(true);
         goalInput.setGravity(Gravity.CENTER_VERTICAL);
         goalInput.setPadding(dp(16), 0, dp(16), 0);
-        goalInput.setBackground(roundColor(Color.rgb(245, 243, 248), 12));
+        goalInput.setBackground(roundColor(ContextCompat.getColor(this, R.color.background_card), 12));
         LinearLayout.LayoutParams goalInputParams = new LinearLayout.LayoutParams(-1, dp(56));
         goalInputParams.setMargins(0, dp(4), 0, dp(12));
         content.addView(goalInput, goalInputParams);
@@ -1159,8 +1216,8 @@ public class MainActivity extends AppCompatActivity {
             showSettings();
         }), new LinearLayout.LayoutParams(-1, dp(48)));
 
-        TextView preferencesHeader = text("App Preferences", 20, PURPLE_DARK);
-        preferencesHeader.setTypeface(null, Typeface.BOLD);
+        TextView preferencesHeader = text("App Preferences", 20, purpleDark);
+        preferencesHeader.setTextAppearance(R.style.TextAppearance_FocusPet_Title);
         preferencesHeader.setPadding(0, 0, 0, dp(8));
         LinearLayout.LayoutParams prefsHeaderParams = new LinearLayout.LayoutParams(-1, -2);
         prefsHeaderParams.setMargins(0, dp(32), 0, 0);
@@ -1171,21 +1228,21 @@ public class MainActivity extends AppCompatActivity {
         resetButton.setBackground(statefulOutline(danger, dangerDark, 28));
         content.addView(resetButton, new LinearLayout.LayoutParams(-1, dp(52)));
 
-        TextView aboutHeader = text("About", 20, PURPLE_DARK);
-        aboutHeader.setTypeface(null, Typeface.BOLD);
+        TextView aboutHeader = text("About", 20, purpleDark);
+        aboutHeader.setTextAppearance(R.style.TextAppearance_FocusPet_Title);
         aboutHeader.setPadding(0, 0, 0, dp(8));
         LinearLayout.LayoutParams aboutHeaderParams = new LinearLayout.LayoutParams(-1, -2);
         aboutHeaderParams.setMargins(0, dp(32), 0, 0);
         content.addView(aboutHeader, aboutHeaderParams);
 
-        TextView appName = text("FocusPet", 20, Color.rgb(35, 29, 38));
-        appName.setTypeface(null, Typeface.BOLD);
+        TextView appName = text("FocusPet", 20, ContextCompat.getColor(this, R.color.text_primary));
+        appName.setTextAppearance(R.style.TextAppearance_FocusPet_Title);
         content.addView(appName);
         content.addView(text("Version " + BuildConfig.VERSION_NAME, 13, sectionColor));
         content.addView(text("A focus timer with a companion that grows alongside you. "
-                + "All of your progress is stored privately on this device — "
+                + "All of your progress is stored privately on this device. "
                 + "no account, no ads, and no network connection required.",
-                13, Color.rgb(75, 67, 80)));
+                13, ContextCompat.getColor(this, R.color.text_secondary)));
     }
 
     private void showResetConfirmation() {

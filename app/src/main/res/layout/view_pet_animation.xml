@@ -16,5 +16,5 @@
         android:layout_height="match_parent"
         android:gravity="center"
         android:text="Pet animation"
-        android:textColor="@color/focuspet_muted_text" />
+        android:textColor="@color/text_secondary" />
 </FrameLayout>

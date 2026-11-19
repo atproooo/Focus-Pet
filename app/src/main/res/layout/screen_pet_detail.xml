@@ -10,9 +10,9 @@
         android:layout_height="wrap_content"
         android:paddingTop="8dp"
         android:paddingBottom="12dp"
-        android:text="‹  Back to collection"
-        android:textColor="@color/focuspet_purple_dark"
-        android:textSize="16sp"
+        android:text="← Back to collection"
+        android:textColor="@color/text_primary"
+        android:textSize="18sp"
         android:textStyle="bold" />
 
     <TextView
@@ -23,8 +23,8 @@
         android:contentDescription="Reserved large pet artwork and animation space"
         android:gravity="center"
         android:text="PET ARTWORK&#10;/ ANIMATION"
-        android:textColor="@color/focuspet_purple"
-        android:textSize="22sp"
+        android:textColor="@color/text_secondary"
+        android:textSize="24sp"
         android:textStyle="bold" />
 
     <TextView
@@ -32,8 +32,8 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:paddingTop="18dp"
-        android:textColor="@color/focuspet_purple_dark"
-        android:textSize="26sp"
+        android:textColor="@color/text_primary"
+        android:textSize="28sp"
         android:textStyle="bold" />
 
     <TextView
@@ -41,8 +41,8 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:paddingTop="4dp"
-        android:textColor="@color/focuspet_muted_text"
-        android:textSize="17sp" />
+        android:textColor="@color/text_secondary"
+        android:textSize="18sp" />
 
     <ProgressBar
         android:id="@+id/pet_detail_progress"
@@ -51,15 +51,15 @@
         android:layout_height="18dp"
         android:layout_marginTop="14dp"
         android:max="100"
-        android:progressTint="@color/focuspet_purple" />
+        android:progressTint="@color/text_secondary" />
 
     <TextView
         android:id="@+id/pet_detail_description"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:paddingTop="18dp"
-        android:textColor="@color/focuspet_muted_text"
-        android:textSize="17sp" />
+        android:textColor="@color/text_secondary"
+        android:textSize="18sp" />
 
     <LinearLayout
         android:id="@+id/pet_detail_actions"

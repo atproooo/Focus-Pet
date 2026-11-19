@@ -7,14 +7,14 @@
         android:id="@+id/hatch_result_name"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:textSize="24sp"
-        android:textColor="@color/focuspet_text" />
+        android:textSize="26sp"
+        android:textColor="@color/text_primary" />
     <include layout="@layout/view_pet_animation" />
     <TextView
         android:id="@+id/hatch_result_meta"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:textColor="@color/focuspet_muted_text" />
+        android:textColor="@color/text_secondary" />
     <LinearLayout
         android:id="@+id/hatch_result_actions"
         android:layout_width="match_parent"
