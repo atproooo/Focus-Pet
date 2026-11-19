@@ -1,0 +1,13 @@
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape>
+            <solid android:color="@color/window_title" />
+            <stroke android:width="2dp" android:color="@color/window_border" />
+        </shape>
+    </item>
+    <item android:left="3dp" android:top="3dp" android:right="3dp" android:bottom="25dp">
+        <shape>
+            <solid android:color="@color/window_title_highlight" />
+        </shape>
+    </item>
+</layer-list>

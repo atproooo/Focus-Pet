@@ -9,21 +9,21 @@
     </style>
 
     <style name="TextAppearance.FocusPet.Body" parent="@android:style/TextAppearance">
-        <item name="android:textSize">@dimen/text_size_18</item>
+        <item name="android:textSize">@dimen/text_size_17</item>
         <item name="android:textColor">@color/text_secondary</item>
         <item name="android:fontFamily">@font/fusion_pixel_10px_monospaced_latin</item>
         <item name="fontFamily">@font/fusion_pixel_10px_monospaced_latin</item>
     </style>
 
     <style name="TextAppearance.FocusPet.Caption" parent="@android:style/TextAppearance">
-        <item name="android:textSize">@dimen/text_size_14</item>
+        <item name="android:textSize">@dimen/text_size_15</item>
         <item name="android:textColor">@color/text_secondary</item>
         <item name="android:fontFamily">@font/fusion_pixel_10px_monospaced_latin</item>
         <item name="fontFamily">@font/fusion_pixel_10px_monospaced_latin</item>
     </style>
 
     <style name="TextAppearance.FocusPet.Input" parent="@android:style/TextAppearance">
-        <item name="android:textSize">@dimen/text_size_20</item>
+        <item name="android:textSize">@dimen/text_size_19</item>
         <item name="android:textColor">@color/text_primary</item>
         <item name="android:fontFamily">@font/fusion_pixel_10px_monospaced_latin</item>
         <item name="fontFamily">@font/fusion_pixel_10px_monospaced_latin</item>
@@ -32,7 +32,7 @@
     <style name="Widget.FocusPet.PrimaryButton" parent="Widget.Material3.Button">
         <item name="android:textAllCaps">false</item>
         <item name="android:textStyle">bold</item>
-        <item name="android:textSize">@dimen/text_size_18</item>
+        <item name="android:textSize">@dimen/text_size_17</item>
         <item name="android:textColor">@color/text_on_button</item>
         <item name="android:minHeight">@dimen/focuspet_button_height</item>
         <item name="android:fontFamily">@font/fusion_pixel_10px_monospaced_latin</item>
@@ -42,7 +42,7 @@
     <style name="Widget.FocusPet.OutlineButton" parent="Widget.Material3.Button.OutlinedButton">
         <item name="android:textAllCaps">false</item>
         <item name="android:textStyle">bold</item>
-        <item name="android:textSize">@dimen/text_size_16</item>
+        <item name="android:textSize">@dimen/text_size_15</item>
         <item name="android:textColor">@color/text_primary</item>
         <item name="android:minHeight">@dimen/focuspet_compact_button_height</item>
         <item name="android:fontFamily">@font/fusion_pixel_10px_monospaced_latin</item>

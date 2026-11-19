@@ -19,6 +19,7 @@ import android.text.InputType;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.Button;
 import android.widget.EditText;
@@ -128,7 +129,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void buildShell() {
         FrameLayout root = new FrameLayout(this);
-        root.setBackgroundColor(surface);
+        root.setBackgroundColor(ContextCompat.getColor(this, R.color.desktop_background));
         ViewCompat.setOnApplyWindowInsetsListener(root, (view, insets) -> {
             int topInset = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top;
             view.setPadding(0, topInset, 0, 0);
@@ -138,38 +139,41 @@ public class MainActivity extends AppCompatActivity {
         shell.setOrientation(LinearLayout.VERTICAL);
         LinearLayout header = new LinearLayout(this);
         header.setGravity(Gravity.CENTER_VERTICAL);
-        title = text("Focus Grove", 25, ContextCompat.getColor(this, R.color.text_primary));
+        title = text("FOCUSGROVE.EXE", 20, ContextCompat.getColor(this, R.color.text_on_button));
         title.setTextAppearance(R.style.TextAppearance_FocusPet_Title);
-        title.setPadding(dp(12), dp(22), dp(8), dp(18));
-        header.setBackgroundColor(
-                ContextCompat.getColor(this, R.color.background_app));
-        TextView iconPlaceholder = text("✦", 20,
-                ContextCompat.getColor(this, R.color.text_primary));
-        iconPlaceholder.setBackground(roundColor(lavender, 16));
+        title.setTextColor(ContextCompat.getColor(this, R.color.text_on_button));
+        title.setPadding(dp(10), 0, dp(8), 0);
+        header.setBackgroundResource(R.drawable.bg_focuspet_window_header);
+        TextView iconPlaceholder = text("", 20,
+                ContextCompat.getColor(this, R.color.text_on_button));
+//        iconPlaceholder.setBackground(roundColor(
+//                ContextCompat.getColor(this, R.color.window_title_highlight), 2));
         iconPlaceholder.setGravity(Gravity.CENTER);
         iconPlaceholder.setContentDescription("App icon placeholder");
-        LinearLayout.LayoutParams iconParams = new LinearLayout.LayoutParams(dp(48), dp(48));
-        iconParams.setMargins(dp(20), dp(12), dp(4), dp(8));
+        LinearLayout.LayoutParams iconParams = new LinearLayout.LayoutParams(dp(34), dp(34));
+        iconParams.setMargins(dp(6), dp(6), dp(4), dp(6));
         header.addView(iconPlaceholder, iconParams);
         header.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
+        header.setMinimumHeight(dp(48));
         shell.addView(header);
         content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(dp(20), 0, dp(20), dp(32));
+        content.setBackgroundColor(ContextCompat.getColor(this, R.color.window_surface));
+        content.setPadding(dp(14), dp(10), dp(14), dp(32));
         ScrollView scroll = new ScrollView(this);
         scroll.setClipToPadding(false);
         scroll.addView(content);
         shell.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
         navigation = new LinearLayout(this);
         navigation.setGravity(Gravity.CENTER);
-        navigation.setBackgroundColor(
-                ContextCompat.getColor(this, R.color.background_accent));
+        navigation.setBackgroundResource(R.drawable.bg_focuspet_taskbar);
         addNavigationButton(navigation, R.drawable.icon_home, "Focus", v -> showHome());
         addNavigationButton(navigation, R.drawable.icon_collection, "Collection", v -> showCollection());
         addNavigationButton(navigation, R.drawable.icon_statistics, "Statistics", v -> showStats());
         addNavigationButton(navigation, R.drawable.icon_settings, "Settings", v -> showSettings());
         navigation.setPadding(dp(4), dp(6), dp(4), dp(6));
-        shell.addView(navigation, new LinearLayout.LayoutParams(-1, dp(92)));
+        shell.addView(navigation, new LinearLayout.LayoutParams(-1,
+                (int) getResources().getDimension(R.dimen.focuspet_navigation_height)));
         root.addView(shell, new FrameLayout.LayoutParams(-1, -1));
         if (BuildConfig.DEBUG) {
             debugButton = text("⚙", 22, ContextCompat.getColor(this, R.color.text_primary));
@@ -179,7 +183,7 @@ public class MainActivity extends AppCompatActivity {
             debugButton.setOnClickListener(v -> showDebugResourceDialog());
             FrameLayout.LayoutParams debugParams =
                     new FrameLayout.LayoutParams(dp(58), dp(58), Gravity.BOTTOM | Gravity.END);
-            debugParams.setMargins(0, 0, dp(16), dp(104));
+            debugParams.setMargins(0, 0, dp(16), dp(80));
             root.addView(debugButton, debugParams);
         }
         setContentView(root);
@@ -208,14 +212,14 @@ public class MainActivity extends AppCompatActivity {
         panel.addView(coins);
         panel.addView(essence);
         panel.addView(eggs);
-        new AlertDialog.Builder(this).setTitle("Debug resources")
+        showDefaultFontDialog(new AlertDialog.Builder(this).setTitle("Debug resources")
                 .setMessage("Development-only controls. These are removed from release builds.")
                 .setView(panel)
                 .setNegativeButton("Cancel", null)
                 .setPositiveButton("Add resources", (dialog, which) -> {
                     store.addDebugResources(parseAmount(coins), parseAmount(essence), parseAmount(eggs));
                     recreate();
-                }).show();
+                }));
     }
 
     private void addDebugPreset(LinearLayout parent, String label, int amount) {
@@ -263,19 +267,19 @@ public class MainActivity extends AppCompatActivity {
         item.setBackground(statefulBackground(
                 ContextCompat.getColor(this, android.R.color.transparent),
                 lavender,
-                ContextCompat.getColor(this, android.R.color.darker_gray)));
+                ContextCompat.getColor(this, android.R.color.darker_gray), 2));
         item.setOnClickListener(listener);
         navigationItems.add(item);
         navigationIcons.add(iconView);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, -1, 1);
-        params.setMargins(dp(5), dp(2), dp(5), dp(2));
+        params.setMargins(dp(3), dp(2), dp(3), dp(2));
         navigation.addView(item, params);
     }
 
     private void setActiveTab(int index) {
         for (int i = 0; i < navigationItems.size(); i++) {
             navigationItems.get(i).setBackground(roundColor(i == index ? lavender
-                    : ContextCompat.getColor(this, android.R.color.transparent), 28));
+                    : ContextCompat.getColor(this, android.R.color.transparent), 2));
             navigationIcons.get(i).setColorFilter(ContextCompat.getColor(
                     this, i == index ? R.color.text_primary : R.color.text_secondary));
         }
@@ -292,6 +296,12 @@ public class MainActivity extends AppCompatActivity {
         return drawable;
     }
 
+    private GradientDrawable borderedColor(int fill, int border, int width, int radius) {
+        GradientDrawable drawable = roundColor(fill, radius);
+        drawable.setStroke(dp(width), border);
+        return drawable;
+    }
+
     private GradientDrawable outline(int color, int width, int radius) {
         GradientDrawable drawable = new GradientDrawable();
         drawable.setColor(ContextCompat.getColor(this, android.R.color.transparent));
@@ -300,11 +310,15 @@ public class MainActivity extends AppCompatActivity {
         return drawable;
     }
 
-    private StateListDrawable statefulBackground(int normal, int pressed, int disabled) {
+    private StateListDrawable statefulBackground(int normal, int pressed, int disabled, int radius) {
         StateListDrawable states = new StateListDrawable();
-        states.addState(new int[]{-android.R.attr.state_enabled}, roundColor(disabled, 28));
-        states.addState(new int[]{android.R.attr.state_pressed}, roundColor(pressed, 28));
-        states.addState(new int[]{}, roundColor(normal, 28));
+        int border = ContextCompat.getColor(this, R.color.button_outline);
+        states.addState(new int[]{-android.R.attr.state_enabled},
+                borderedColor(disabled, border, 2, radius));
+        states.addState(new int[]{android.R.attr.state_pressed},
+                borderedColor(pressed, border, 2, radius));
+        states.addState(new int[]{},
+                borderedColor(normal, border, 2, radius));
         return states;
     }
 
@@ -315,6 +329,12 @@ public class MainActivity extends AppCompatActivity {
         view.setTextColor(color);
         view.setTypeface(pixelFont);
         view.setPadding(dp(12), dp(8), dp(12), dp(8));
+        return view;
+    }
+
+    private TextView systemText(String value, int size, int color) {
+        TextView view = text(value, size, color);
+        view.setTypeface(Typeface.DEFAULT);
         return view;
     }
 
@@ -349,7 +369,7 @@ public class MainActivity extends AppCompatActivity {
         button.setBackground(statefulBackground(
                 ContextCompat.getColor(this, R.color.button_primary),
                 ContextCompat.getColor(this, R.color.button_primary_pressed),
-                ContextCompat.getColor(this, R.color.button_primary_disabled)));
+                ContextCompat.getColor(this, R.color.button_primary_disabled), 3));
         button.setTextColor(ContextCompat.getColor(this, R.color.text_on_button));
         button.setTypeface(pixelFont);
         button.setTextSize(TypedValue.COMPLEX_UNIT_PX,
@@ -367,9 +387,9 @@ public class MainActivity extends AppCompatActivity {
         button.setText(label);
         button.setTextAppearance(R.style.Widget_FocusPet_OutlineButton);
         button.setAllCaps(false);
-        button.setMinHeight(dp(48));
+        button.setMinHeight(dp(46));
         button.setBackground(statefulOutline(
-                ContextCompat.getColor(this, R.color.button_outline), purple, 28));
+                ContextCompat.getColor(this, R.color.button_outline), purple, 3));
         button.setOnClickListener(listener);
         return button;
     }
@@ -377,7 +397,7 @@ public class MainActivity extends AppCompatActivity {
     private StateListDrawable statefulOutline(int border, int pressedColor, int radius) {
         StateListDrawable states = new StateListDrawable();
         states.addState(new int[]{android.R.attr.state_pressed}, outline(pressedColor, 2, radius));
-        states.addState(new int[]{}, outline(border, 1, radius));
+        states.addState(new int[]{}, outline(border, 2, radius));
         return states;
     }
 
@@ -434,7 +454,7 @@ public class MainActivity extends AppCompatActivity {
 
         List<FocusSession> recent = repository.recentHistory(3);
         if (recent.isEmpty()) {
-            content.addView(text("No sessions yet. Your recent focus sessions will appear here.",
+            content.addView(systemText("No sessions yet. Your recent focus sessions will appear here.",
                     16, ContextCompat.getColor(this, R.color.text_secondary)));
         } else {
             for (FocusSession session : recent) {
@@ -528,7 +548,7 @@ public class MainActivity extends AppCompatActivity {
         for (int value : presetValues) {
             Button preset = outlineButton(value + " min", v -> customDuration.setText(String.valueOf(value)));
             preset.setTextAppearance(R.style.TextAppearance_FocusPet_Caption);
-            LinearLayout.LayoutParams presetParams = new LinearLayout.LayoutParams(0, dp(48), 1);
+            LinearLayout.LayoutParams presetParams = new LinearLayout.LayoutParams(0, dp(44), 1);
             presetParams.setMargins(dp(4), dp(4), dp(4), dp(4));
             presets.addView(preset, presetParams);
         }
@@ -637,7 +657,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void showEndSessionConfirmation() {
-        new AlertDialog.Builder(this)
+        showDefaultFontDialog(new AlertDialog.Builder(this)
                 .setTitle("End focus session?")
                 .setMessage("You can still claim rewards for the time you focused, but ending early may reduce XP, coins, Life Essence, Pet Egg chances, and the minutes credited toward your daily goal, by 70%.")
                 .setNegativeButton("No", null)
@@ -650,17 +670,17 @@ public class MainActivity extends AppCompatActivity {
                     if (focusedMinutes < 4) showFinalEndWarning();
                     else sendService(FocusService.ACTION_CANCEL);
                 })
-                .show();
+                );
     }
 
     private void showFinalEndWarning() {
-        new AlertDialog.Builder(this)
+        showDefaultFontDialog(new AlertDialog.Builder(this)
                 .setTitle("Really end your session early?")
                 .setMessage("Sessions under 4 focused minutes may count as 0 minutes toward your goal. This cannot be undone. Do you still want to end now?")
                 .setNegativeButton("No, keep focusing", null)
                 .setPositiveButton("Yes, end anyway", (dialog, which) ->
                         sendService(FocusService.ACTION_CANCEL))
-                .show();
+                );
     }
 
     private void sendService(String action) {
@@ -715,7 +735,7 @@ public class MainActivity extends AppCompatActivity {
         claimName.setPadding(0, dp(8), 0, dp(8));
         content.addView(claimName);
         content.addView(text("Your session rewards", 24, ContextCompat.getColor(this, R.color.text_primary)));
-        content.addView(text("★ +" + session.xpReward + " XP\n"
+        content.addView(systemText("★ +" + session.xpReward + " XP\n"
                 + "● +" + session.coinReward + " coins\n"
                 + "✦ +" + session.essenceReward + " Life Essence\n"
                 + (session.eggReward ? "Pet Egg found!" : "No Pet Egg this time"),
@@ -780,11 +800,11 @@ public class MainActivity extends AppCompatActivity {
             if ("Pet Eggs".equals(title)) {
                 showHatching();
             } else {
-                new AlertDialog.Builder(this)
+                showDefaultFontDialog(new AlertDialog.Builder(this)
                         .setTitle(title)
                         .setMessage(description)
                         .setPositiveButton("OK", null)
-                        .show();
+                        );
             }
         });
         parent.addView(chip);
@@ -871,12 +891,32 @@ public class MainActivity extends AppCompatActivity {
         android.widget.Toast.makeText(this, message, android.widget.Toast.LENGTH_SHORT).show();
     }
 
+    private void showDefaultFontDialog(AlertDialog.Builder builder) {
+        AlertDialog dialog = builder.create();
+        dialog.setOnShowListener(ignored -> {
+            setDefaultFont(dialog.getWindow().getDecorView());
+        });
+        dialog.show();
+    }
+
+    private void setDefaultFont(View view) {
+        if (view instanceof TextView) {
+            ((TextView) view).setTypeface(Typeface.DEFAULT);
+        }
+        if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++) {
+                setDefaultFont(group.getChildAt(i));
+            }
+        }
+    }
+
     private void setAvailable(Button button, boolean available) {
         button.setEnabled(available);
-        button.setBackgroundTintList(android.content.res.ColorStateList.valueOf(
-                available
-                        ? ContextCompat.getColor(this, R.color.button_primary)
-                        : ContextCompat.getColor(this, R.color.button_primary_disabled)));
+        button.setBackground(statefulBackground(
+                ContextCompat.getColor(this, R.color.button_primary),
+                ContextCompat.getColor(this, R.color.button_primary_pressed),
+                ContextCompat.getColor(this, R.color.button_primary_disabled), 3));
         button.setTextColor(available
                 ? ContextCompat.getColor(this, R.color.text_on_button)
                 : ContextCompat.getColor(this, R.color.text_secondary));
@@ -967,7 +1007,7 @@ public class MainActivity extends AppCompatActivity {
                 + "\nPet Eggs: " + store.petEggs(), 18, ContextCompat.getColor(this, R.color.text_secondary));
         balance.setId(R.id.shop_balance);
         content.addView(balance);
-        content.addView(text("Coins buy clothing and decorations.\n"
+        content.addView(systemText("Coins buy clothing and decorations.\n"
                 + "Pet Eggs drop from focus sessions. Hatching costs one egg and 100 Essence.", 15, ContextCompat.getColor(this, R.color.text_secondary)));
         for (ShopProduct product : ShopCatalog.PRODUCTS) {
             LinearLayout row = new LinearLayout(this);
@@ -992,7 +1032,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void confirmPurchase(ShopProduct product) {
         String requestId = UUID.randomUUID().toString();
-        new AlertDialog.Builder(this).setTitle("Buy " + product.name + "?")
+        showDefaultFontDialog(new AlertDialog.Builder(this).setTitle("Buy " + product.name + "?")
                 .setMessage(product.price + (product.currency == Currency.COINS ? " Coins" : " Essence"))
                 .setNegativeButton("Cancel", null)
                 .setPositiveButton("Buy", (dialog, which) -> {
@@ -1002,7 +1042,7 @@ public class MainActivity extends AppCompatActivity {
                     else if (result == FocusStore.PurchaseResult.INSUFFICIENT_RESOURCES) toast("Not enough resources.");
                     else toast("Purchase could not be saved. Please try again.");
                     showShop();
-                }).show();
+                }));
     }
 
     private void showWardrobe(long petId) {
@@ -1026,7 +1066,7 @@ public class MainActivity extends AppCompatActivity {
             toggle.setTag("equip_" + item.id);
             content.addView(toggle);
         }
-        if (!hasItems) content.addView(text("Buy clothing and decorations in the shop to customize your pet.", 16, ContextCompat.getColor(this, R.color.text_secondary)));
+        if (!hasItems) content.addView(systemText("Buy clothing and decorations in the shop to customize your pet.", 16, ContextCompat.getColor(this, R.color.text_secondary)));
         content.addView(button("Shop", v -> showShop()));
     }
 
@@ -1075,7 +1115,7 @@ public class MainActivity extends AppCompatActivity {
         LinearLayout historyContainer = screen.findViewById(R.id.history_container);
         List<FocusSession> history = repository.history();
         if (history.isEmpty()) {
-            TextView empty = text("No focus sessions yet. Complete your first session to see it here.",
+            TextView empty = systemText("No focus sessions yet. Complete your first session to see it here.",
                     16, ContextCompat.getColor(this, R.color.text_secondary));
             empty.setPadding(0, dp(8), 0, dp(12));
             historyContainer.addView(empty);
@@ -1214,7 +1254,7 @@ public class MainActivity extends AppCompatActivity {
             android.widget.Toast.makeText(this, "Daily goal saved.",
                     android.widget.Toast.LENGTH_SHORT).show();
             showSettings();
-        }), new LinearLayout.LayoutParams(-1, dp(48)));
+        }), new LinearLayout.LayoutParams(-1, dp(46)));
 
         TextView preferencesHeader = text("App Preferences", 20, purpleDark);
         preferencesHeader.setTextAppearance(R.style.TextAppearance_FocusPet_Title);
@@ -1225,8 +1265,8 @@ public class MainActivity extends AppCompatActivity {
 
         Button resetButton = outlineButton("Reset local progress", v -> showResetConfirmation());
         resetButton.setTextColor(danger);
-        resetButton.setBackground(statefulOutline(danger, dangerDark, 28));
-        content.addView(resetButton, new LinearLayout.LayoutParams(-1, dp(52)));
+        resetButton.setBackground(statefulOutline(danger, dangerDark, 3));
+        content.addView(resetButton, new LinearLayout.LayoutParams(-1, dp(46)));
 
         TextView aboutHeader = text("About", 20, purpleDark);
         aboutHeader.setTextAppearance(R.style.TextAppearance_FocusPet_Title);
@@ -1239,14 +1279,14 @@ public class MainActivity extends AppCompatActivity {
         appName.setTextAppearance(R.style.TextAppearance_FocusPet_Title);
         content.addView(appName);
         content.addView(text("Version " + BuildConfig.VERSION_NAME, 13, sectionColor));
-        content.addView(text("A focus timer with a companion that grows alongside you. "
+        content.addView(systemText("A focus timer with a companion that grows alongside you. "
                 + "All of your progress is stored privately on this device. "
                 + "no account, no ads, and no network connection required.",
                 13, ContextCompat.getColor(this, R.color.text_secondary)));
     }
 
     private void showResetConfirmation() {
-        new AlertDialog.Builder(this)
+        showDefaultFontDialog(new AlertDialog.Builder(this)
                 .setTitle("Reset local progress?")
                 .setMessage("This will permanently erase your focus history, rewards, pets, and streak progress from this device.")
                 .setNegativeButton("Cancel", null)
@@ -1255,7 +1295,7 @@ public class MainActivity extends AppCompatActivity {
                     repository.ensureStarterPet();
                     showSettings();
                 })
-                .show();
+                );
     }
 
     private void requestNotifications() {

@@ -47,7 +47,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:textColor="@color/text_secondary"
-            android:textSize="16sp" />
+            android:textSize="17sp" />
 
         <TextView
             android:id="@+id/pet_progress_label"
@@ -56,7 +56,7 @@
             android:layout_marginTop="4dp"
             android:text="EXP progress"
             android:textColor="@color/text_secondary"
-            android:textSize="16sp" />
+            android:textSize="17sp" />
 
         <ProgressBar
             android:id="@+id/pet_progress"
@@ -65,13 +65,14 @@
             android:layout_height="16dp"
             android:layout_marginTop="2dp"
             android:max="100"
-            android:progressTint="@color/text_secondary" />
+            android:progressTint="@color/progress_foreground"
+            android:progressBackgroundTint="@color/progress_track" />
 
         <TextView
             android:id="@+id/pet_hint"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:textColor="@color/text_secondary"
-            android:textSize="16sp" />
+            android:textSize="17sp" />
     </LinearLayout>
 </LinearLayout>

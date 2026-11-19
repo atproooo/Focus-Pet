@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <shape xmlns:android="http://schemas.android.com/apk/res/android">
     <solid android:color="@color/background_card" />
+    <stroke android:width="2dp" android:color="@color/window_border" />
     <corners android:radius="@dimen/focuspet_card_radius" />
 </shape>

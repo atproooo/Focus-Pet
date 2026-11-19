@@ -16,7 +16,7 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:orientation="vertical">
-            <TextView android:id="@+id/summary_time_label" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Total focus time" android:textColor="@color/text_secondary" android:textSize="16sp" />
+            <TextView android:id="@+id/summary_time_label" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Total focus time" android:textColor="@color/text_secondary" android:textSize="17sp" />
             <TextView android:id="@+id/summary_time_value" android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingTop="3dp" android:textColor="@color/text_primary" android:textSize="24sp" android:textStyle="bold" />
         </LinearLayout>
         <LinearLayout
@@ -24,7 +24,7 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:orientation="vertical">
-            <TextView android:id="@+id/summary_sessions_label" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Completed sessions" android:textColor="@color/text_secondary" android:textSize="16sp" />
+            <TextView android:id="@+id/summary_sessions_label" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Completed sessions" android:textColor="@color/text_secondary" android:textSize="17sp" />
             <TextView android:id="@+id/summary_sessions_value" android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingTop="3dp" android:textColor="@color/text_primary" android:textSize="24sp" android:textStyle="bold" />
         </LinearLayout>
     </LinearLayout>
@@ -40,7 +40,7 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:orientation="vertical">
-            <TextView android:id="@+id/summary_current_label" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Current streak" android:textColor="@color/text_secondary" android:textSize="16sp" />
+            <TextView android:id="@+id/summary_current_label" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Current streak" android:textColor="@color/text_secondary" android:textSize="17sp" />
             <TextView android:id="@+id/summary_current_value" android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingTop="3dp" android:textColor="@color/text_primary" android:textSize="24sp" android:textStyle="bold" />
         </LinearLayout>
         <LinearLayout
@@ -48,7 +48,7 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:orientation="vertical">
-            <TextView android:id="@+id/summary_longest_label" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Longest streak" android:textColor="@color/text_secondary" android:textSize="16sp" />
+            <TextView android:id="@+id/summary_longest_label" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Longest streak" android:textColor="@color/text_secondary" android:textSize="17sp" />
             <TextView android:id="@+id/summary_longest_value" android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingTop="3dp" android:textColor="@color/text_primary" android:textSize="24sp" android:textStyle="bold" />
         </LinearLayout>
     </LinearLayout>

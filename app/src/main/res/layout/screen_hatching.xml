@@ -8,11 +8,16 @@
         android:id="@+id/hatching_back"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:paddingTop="8dp"
-        android:paddingBottom="12dp"
-        android:text="← Back to collection"
+        android:background="@drawable/bg_focuspet_back"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center_vertical"
+        android:minHeight="48dp"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:text="&lt; Back to collection"
         android:textColor="@color/text_primary"
-        android:textSize="18sp"
+        android:textSize="16sp"
         android:textStyle="bold" />
 
     <TextView
@@ -44,6 +49,7 @@
         android:layout_marginTop="10dp"
         android:background="@drawable/bg_focuspet_card"
         android:padding="16dp"
+        android:fontFamily="sans"
         android:textColor="@color/text_secondary"
         android:textSize="18sp" />
 
