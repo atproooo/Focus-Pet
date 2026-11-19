@@ -13,17 +13,11 @@
     android:minHeight="158dp"
     android:padding="14dp">
 
-    <TextView
-        android:id="@+id/pet_image_placeholder"
+    <include
+        layout="@layout/view_pet_animation"
         android:layout_width="112dp"
         android:layout_height="128dp"
-        android:background="@drawable/bg_focuspet_lavender"
-        android:contentDescription="Reserved pet artwork"
-        android:gravity="center"
-        android:text="PET&#10;ART"
-        android:textColor="@color/text_secondary"
-        android:textSize="20sp"
-        android:textStyle="bold" />
+        android:layout_marginTop="0dp" />
 
     <LinearLayout
         android:layout_width="0dp"

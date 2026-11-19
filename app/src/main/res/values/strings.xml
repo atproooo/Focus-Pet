@@ -1,3 +1,13 @@
 <resources>
     <string name="app_name">FocusPet</string>
+    <string name="pet_look_original">Original look</string>
+    <string name="pet_look_classic">Classic cat</string>
+    <string name="pet_look_headphones">Headphones cat</string>
+    <string name="pet_look_winter">Winter cat</string>
+    <string name="pet_look_choose">Choose appearance</string>
+    <string name="pet_look_save">Save appearance</string>
+    <string name="pet_look_save_error">Could not save the appearance.</string>
+    <string name="pet_look_description">%1$s, %2$s</string>
+    <string name="pet_look_placeholder">%1$s\nOriginal look</string>
+    <string name="pet_look_generic_name">Your pet</string>
 </resources>

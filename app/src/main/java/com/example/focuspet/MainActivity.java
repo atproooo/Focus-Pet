@@ -26,6 +26,8 @@ import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
+import android.widget.RadioButton;
+import android.widget.RadioGroup;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.util.TypedValue;
@@ -144,15 +146,16 @@ public class MainActivity extends AppCompatActivity {
         title.setTextColor(ContextCompat.getColor(this, R.color.text_on_button));
         title.setPadding(dp(10), 0, dp(8), 0);
         header.setBackgroundResource(R.drawable.bg_focuspet_window_header);
-        TextView iconPlaceholder = text("", 20,
-                ContextCompat.getColor(this, R.color.text_on_button));
-//        iconPlaceholder.setBackground(roundColor(
-//                ContextCompat.getColor(this, R.color.window_title_highlight), 2));
-        iconPlaceholder.setGravity(Gravity.CENTER);
-        iconPlaceholder.setContentDescription("App icon placeholder");
+        ImageView appIcon = new ImageView(this);
+        appIcon.setImageResource(R.drawable.icon_pet_header);
+        appIcon.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        if (appIcon.getDrawable() instanceof android.graphics.drawable.BitmapDrawable) {
+            ((android.graphics.drawable.BitmapDrawable) appIcon.getDrawable()).setFilterBitmap(false);
+        }
+        appIcon.setContentDescription("FocusPet");
         LinearLayout.LayoutParams iconParams = new LinearLayout.LayoutParams(dp(34), dp(34));
         iconParams.setMargins(dp(6), dp(6), dp(4), dp(6));
-        header.addView(iconPlaceholder, iconParams);
+        header.addView(appIcon, iconParams);
         header.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
         header.setMinimumHeight(dp(48));
         shell.addView(header);
@@ -480,7 +483,7 @@ public class MainActivity extends AppCompatActivity {
         String species = pet == null ? "Fox" : pet.species;
         int petLevel = pet == null ? store.level() : pet.level();
         int petXp = pet == null ? store.experience() : pet.experience;
-        configurePetCard(card, petName + " the " + species,
+        configurePetCard(card, pet, petName + " the " + species,
                 "Level " + petLevel + "  ·  " + petXp + " XP",
                 "Your companion",
                 petXp % 100, 1f, v -> showCompanionChooser());
@@ -782,7 +785,7 @@ public class MainActivity extends AppCompatActivity {
         Pet selected = repository.selectedPet();
         for (Pet pet : repository.pets()) {
             View card = LayoutInflater.from(this).inflate(R.layout.item_pet_card, ownedPets, false);
-            configurePetCard(card, pet.name + " the " + pet.species,
+            configurePetCard(card, pet, pet.name + " the " + pet.species,
                     pet.rarity + " - Level " + pet.level(),
                     pet.id == (selected == null ? -1 : selected.id)
                             ? "Selected companion - Tap for details" : "Tap for details",
@@ -810,7 +813,7 @@ public class MainActivity extends AppCompatActivity {
         parent.addView(chip);
     }
 
-    private void configurePetCard(View card, String name, String meta, String hint,
+    private void configurePetCard(View card, Pet pet, String name, String meta, String hint,
                                   int progressValue, float alpha, View.OnClickListener listener) {
         card.setAlpha(alpha);
         card.setOnClickListener(listener);
@@ -818,8 +821,9 @@ public class MainActivity extends AppCompatActivity {
         ((TextView) card.findViewById(R.id.pet_meta)).setText(meta);
         ((TextView) card.findViewById(R.id.pet_hint)).setText(hint);
         ((ProgressBar) card.findViewById(R.id.pet_progress)).setProgress(progressValue);
-        card.findViewById(R.id.pet_image_placeholder)
-                .setContentDescription("Reserved artwork space for " + name);
+        View art = card.findViewById(R.id.pet_animation_container);
+        art.setBackgroundResource(R.drawable.bg_focuspet_lavender);
+        bindPetAnimation(art, pet);
     }
 
     private void showPetDetail(Pet pet) {
@@ -832,6 +836,9 @@ public class MainActivity extends AppCompatActivity {
                 .inflate(R.layout.screen_pet_detail, content, false);
         content.addView(screen);
         screen.findViewById(R.id.pet_detail_back).setOnClickListener(v -> showCollection());
+        View art = screen.findViewById(R.id.pet_animation_container);
+        art.setBackgroundResource(R.drawable.bg_focuspet_image_placeholder);
+        bindPetAnimation(art, pet);
         ((TextView) screen.findViewById(R.id.pet_detail_name))
                 .setText(pet.name + " the " + pet.species);
         ((TextView) screen.findViewById(R.id.pet_detail_meta)).setText(
@@ -940,12 +947,56 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void bindPetAnimation(View slot, Pet pet) {
+        bindPetLook(slot, pet, PetLook.forPet(pet));
+    }
+
+    private void bindPetLook(View slot, Pet pet, PetLook look) {
         slot.setTag(pet == null ? null : pet.id);
-        slot.findViewById(R.id.pet_animation_image).setTag(pet == null ? null : pet.imageKey);
-        ((TextView) slot.findViewById(R.id.pet_animation_placeholder))
-                .setText((pet == null ? "Your pet" : pet.name) + "\nPet animation");
-        slot.setContentDescription(pet == null ? "Reserved pet animation area"
-                : "Animation area for " + pet.name + ". Wearing: " + equippedSummary(pet.id));
+        ImageView art = slot.findViewById(R.id.pet_animation_image);
+        art.setTag(pet == null ? null : pet.imageKey);
+        int artwork = look.artworkFor(pet);
+        art.setImageResource(artwork);
+        art.setVisibility(artwork != 0 ? View.VISIBLE : View.GONE);
+        TextView placeholder = slot.findViewById(R.id.pet_animation_placeholder);
+        String name = pet == null || pet.name == null ? getString(R.string.pet_look_generic_name) : pet.name;
+        placeholder.setText(getString(R.string.pet_look_placeholder, name));
+        placeholder.setVisibility(artwork == 0 ? View.VISIBLE : View.GONE);
+        slot.setContentDescription(getString(R.string.pet_look_description, name, getString(look.label)));
+    }
+
+    private void showPetLookPicker(long petId, View displayedArt) {
+        Pet pet = repository.pet(petId);
+        if (pet == null) return;
+        View picker = getLayoutInflater().inflate(R.layout.dialog_pet_look, null);
+        View preview = picker.findViewById(R.id.pet_animation_container);
+        RadioGroup options = picker.findViewById(R.id.pet_look_options);
+        PetLook currentLook = PetLook.forPet(pet);
+        for (PetLook look : PetLook.values()) {
+            if (!look.canChoose(pet) && look != currentLook) continue;
+            RadioButton option = new RadioButton(this);
+            option.setId(View.generateViewId());
+            option.setTag(look);
+            option.setText(look.label);
+            option.setMinHeight(dp(48));
+            options.addView(option);
+            if (look == currentLook) options.check(option.getId());
+        }
+        bindPetLook(preview, pet, currentLook);
+        options.setOnCheckedChangeListener((group, id) -> {
+            View option = group.findViewById(id);
+            if (option != null) bindPetLook(preview, pet, (PetLook) option.getTag());
+        });
+        showDefaultFontDialog(new AlertDialog.Builder(this)
+                .setTitle(R.string.pet_look_choose)
+                .setView(picker)
+                .setNegativeButton(android.R.string.cancel, null)
+                .setPositiveButton(R.string.pet_look_save, (dialog, which) -> {
+                    View selected = options.findViewById(options.getCheckedRadioButtonId());
+                    if (selected == null) return;
+                    PetLook look = (PetLook) selected.getTag();
+                    if (repository.savePetLook(petId, look)) bindPetLook(displayedArt, pet, look);
+                    else toast(getString(R.string.pet_look_save_error));
+                }));
     }
 
     private void showHatchResult(Pet pet) {
@@ -958,7 +1009,8 @@ public class MainActivity extends AppCompatActivity {
         ((TextView) screen.findViewById(R.id.hatch_result_name)).setText(pet.name + " the " + pet.species);
         ((TextView) screen.findViewById(R.id.hatch_result_meta)).setText(
                 "Hatched successfully\n" + pet.rarity + " - Level " + pet.level());
-        bindPetAnimation(screen.findViewById(R.id.pet_animation_container), pet);
+        View art = screen.findViewById(R.id.pet_animation_container);
+        bindPetAnimation(art, pet);
         LinearLayout actions = screen.findViewById(R.id.hatch_result_actions);
         Button select = button("Choose as companion", v -> {
             repository.selectPet(pet.id);
@@ -966,6 +1018,7 @@ public class MainActivity extends AppCompatActivity {
         });
         select.setId(R.id.hatch_result_select);
         actions.addView(select);
+        actions.addView(outlineButton(getString(R.string.pet_look_choose), v -> showPetLookPicker(pet.id, art)));
         actions.addView(button("View pet", v -> showPetDetail(pet)));
         actions.addView(outlineButton("Back to collection", v -> showCollection()));
     }
@@ -1051,6 +1104,9 @@ public class MainActivity extends AppCompatActivity {
         reset("Customize " + pet.name);
         setActiveTab(1);
         content.addView(outlineButton("Back to pet", v -> showPetDetail(pet)));
+        View art = petAnimationSlot(pet);
+        content.addView(art);
+        content.addView(button(getString(R.string.pet_look_choose), v -> showPetLookPicker(petId, art)));
         content.addView(text("Wearing: " + equippedSummary(petId), 17, ContextCompat.getColor(this, R.color.text_secondary)));
         boolean hasItems = false;
         for (CosmeticItem item : ShopCatalog.COSMETICS) {
@@ -1081,7 +1137,7 @@ public class MainActivity extends AppCompatActivity {
                 Pet selected = repository.selectedPet();
                 for (Pet pet : repository.pets()) {
                     View card = LayoutInflater.from(this).inflate(R.layout.item_pet_card, container, false);
-                    configurePetCard(card, pet.name + " the " + pet.species,
+                    configurePetCard(card, pet, pet.name + " the " + pet.species,
                             pet.rarity + " - Level " + pet.level(),
                             pet.id == (selected == null ? -1 : selected.id)
                                     ? "Selected companion - Tap to keep" : "Tap to select",

@@ -45,6 +45,57 @@ public class PetFeaturesRegressionTest {
     void hatchScreen(){onView(withText("Collection")).perform(click());onView(withText(containsString("Eggs"))).perform(click());}
     void collect(View v,int id,List<View> result){if(v.getId()==id)result.add(v);if(v instanceof ViewGroup)for(int i=0;i<((ViewGroup)v).getChildCount();i++)collect(((ViewGroup)v).getChildAt(i),id,result);}
     View view(int id){List<View> result=new ArrayList<>();InstrumentationRegistry.getInstrumentation().runOnMainSync(()->collect(a.getWindow().getDecorView(),id,result));assertEquals(1,result.size());return result.get(0);}
+
+    @Test public void hatchAppearancePreviewsCancelsAndPersistsAcrossScreens() {
+        resources(0, 100, 1);
+        launch();
+        hatchScreen();
+        onView(withId(R.id.hatch_button)).perform(scrollTo(), click());
+        long petId = store.hatchResultPetId();
+        assertEquals(0, store.petEggs());
+        assertEquals(0, store.lifeEssence());
+        checkPetArtwork(R.drawable.pet_look_classic);
+
+        onView(withText(R.string.pet_look_choose)).perform(scrollTo(), click());
+        onView(withText(R.string.pet_look_headphones)).perform(scrollTo(), click());
+        onView(allOf(withId(R.id.pet_animation_image), isDescendantOfA(withId(R.id.pet_look_picker))))
+                .check((view, error) -> assertPetArtwork(view, R.drawable.pet_look_headphones));
+        assertEquals("default", repo.pet(petId).appearanceData);
+        onView(withText(R.string.pet_look_save)).perform(click());
+        assertEquals("headphones_cat", repo.pet(petId).appearanceData);
+        checkPetArtwork(R.drawable.pet_look_headphones);
+
+        onView(withText(R.string.pet_look_choose)).perform(scrollTo(), click());
+        onView(withText(R.string.pet_look_winter)).perform(scrollTo(), click());
+        onView(withText(android.R.string.cancel)).perform(click());
+        assertEquals("headphones_cat", repo.pet(petId).appearanceData);
+        checkPetArtwork(R.drawable.pet_look_headphones);
+
+        reopen();
+        checkPetArtwork(R.drawable.pet_look_headphones);
+        onView(withId(R.id.hatch_result_select)).perform(scrollTo(), click());
+        checkPetArtwork(R.drawable.pet_look_headphones);
+        onView(withText("Start focus")).perform(scrollTo(), click());
+        onView(withText("Begin session")).perform(scrollTo(), click());
+        checkPetArtwork(R.drawable.pet_look_headphones);
+    }
+
+    private void checkPetArtwork(int expectedResource) {
+        onView(withId(R.id.pet_animation_image))
+                .check((view, error) -> assertPetArtwork(view, expectedResource));
+    }
+
+    private void assertPetArtwork(View view, int expectedResource) {
+        assertNotNull(view);
+        ImageView image = (ImageView) view;
+        assertEquals(View.VISIBLE, image.getVisibility());
+        android.graphics.drawable.BitmapDrawable actual =
+                (android.graphics.drawable.BitmapDrawable) image.getDrawable();
+        android.graphics.drawable.BitmapDrawable expected =
+                (android.graphics.drawable.BitmapDrawable) c.getDrawable(expectedResource);
+        assertNotNull(actual);
+        assertTrue(expected.getBitmap().sameAs(actual.getBitmap()));
+    }
     @Test public void purchaseCurrenciesOwnershipAndIdempotency(){
         resources(100,200,0);assertEquals(FocusStore.PurchaseResult.PURCHASED,store.purchase("collar","c1"));assertEquals(75,store.coins());assertEquals(200,store.lifeEssence());
         assertEquals(FocusStore.PurchaseResult.PURCHASED,store.purchase("shirt","s1"));assertEquals(25,store.coins());assertEquals(200,store.lifeEssence());

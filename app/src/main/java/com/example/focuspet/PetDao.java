@@ -20,6 +20,9 @@ public interface PetDao {
     @Query("SELECT * FROM pets WHERE id = :id LIMIT 1")
     Pet byId(long id);
 
+    @Query("UPDATE pets SET appearanceData = :lookKey WHERE id = :id")
+    int updateAppearance(long id, String lookKey);
+
     @Query("SELECT * FROM pets WHERE hatchRequestId = :requestId LIMIT 1")
     Pet byHatchRequest(String requestId);
 

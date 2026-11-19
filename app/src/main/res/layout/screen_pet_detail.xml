@@ -20,17 +20,11 @@
         android:textSize="16sp"
         android:textStyle="bold" />
 
-    <TextView
-        android:id="@+id/pet_detail_art"
+    <include
+        layout="@layout/view_pet_animation"
         android:layout_width="match_parent"
         android:layout_height="220dp"
-        android:background="@drawable/bg_focuspet_image_placeholder"
-        android:contentDescription="Reserved large pet artwork and animation space"
-        android:gravity="center"
-        android:text="PET ARTWORK&#10;/ ANIMATION"
-        android:textColor="@color/text_secondary"
-        android:textSize="24sp"
-        android:textStyle="bold" />
+        android:layout_marginTop="8dp" />
 
     <TextView
         android:id="@+id/pet_detail_name"
