@@ -7,6 +7,8 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
+import android.graphics.RenderEffect;
+import android.graphics.Shader;
 import android.graphics.Typeface;
 
 import android.graphics.drawable.StateListDrawable;
@@ -16,6 +18,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
 import android.text.InputType;
+import android.text.InputFilter;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -23,6 +26,7 @@ import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.HorizontalScrollView;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
@@ -44,6 +48,7 @@ import android.graphics.drawable.GradientDrawable;
 import java.util.Locale;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.time.LocalDate;
@@ -60,9 +65,12 @@ public class MainActivity extends AppCompatActivity {
     private int purpleDark;
     private int surface;
     private int lavender;
+    private int navigationSelected;
     private Typeface pixelFont;
     private FocusStore store;
     private FocusRepository repository;
+    private ShopRepository shopRepository;
+    private ShopCategory selectedShopCategory = ShopCategory.ALL;
     private LinearLayout content;
     private LinearLayout navigation;
     private TextView title;
@@ -70,7 +78,10 @@ public class MainActivity extends AppCompatActivity {
     private BroadcastReceiver timerReceiver;
     private String currentScreen;
     private LocalDate renderedDay;
-    private long hatchResultPetId;
+    private HatchDraft activeHatchDraft;
+    private EditText hatchNameInput;
+    private boolean hatchRecoveryRequired;
+    private boolean hatchCommitPending;
     private final Handler calendarHandler = new Handler(Looper.getMainLooper());
     private final Runnable calendarRefresh = new Runnable() {
         @Override public void run() {
@@ -80,6 +91,9 @@ public class MainActivity extends AppCompatActivity {
     };
     private final List<LinearLayout> navigationItems = new ArrayList<>();
     private final List<ImageView> navigationIcons = new ArrayList<>();
+    private final PetArtworkRenderer petArtworkRenderer = new PetArtworkRenderer();
+    private final List<PetAnimationController> petAnimationControllers = new ArrayList<>();
+    private boolean petAnimationsResumed;
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
@@ -87,12 +101,26 @@ public class MainActivity extends AppCompatActivity {
         purpleDark = ContextCompat.getColor(this, R.color.button_primary_pressed);
         surface = ContextCompat.getColor(this, R.color.background_app);
         lavender = ContextCompat.getColor(this, R.color.background_accent);
+        navigationSelected = ContextCompat.getColor(this, R.color.navigation_selected);
         pixelFont = ResourcesCompat.getFont(this, R.font.fusion_pixel_10px_monospaced_latin);
         store = new FocusStore(this);
         repository = new FocusRepository(this);
+        shopRepository = ShopRepository.getInstance(this);
         repository.ensureStarterPet();
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
             @Override public void handleOnBackPressed() {
+                if (activeHatchDraft != null) {
+                    if (hatchCommitPending) {
+                        toast("Your confirmed hatch is being completed.");
+                        return;
+                    }
+                    moveBackInHatchFlow();
+                    return;
+                }
+                if (hatchRecoveryRequired) {
+                    toast("Hatching is being recovered. Please retry.");
+                    return;
+                }
                 if (store != null && store.hasActiveSession()) {
                     android.widget.Toast.makeText(MainActivity.this,
                             "Finish or end the current focus session first.",
@@ -121,10 +149,28 @@ public class MainActivity extends AppCompatActivity {
             FocusSession pending = repository.latestPending();
             if (pending != null) {
                 showFinish(pending.id, pending.actualMinutes, pending.endedEarly);
-            } else if (store.hatchResultPetId() > 0 && repository.pet(store.hatchResultPetId()) != null) {
-                showHatchResult(repository.pet(store.hatchResultPetId()));
             } else {
-                showHome();
+                HatchDraft draft = null;
+                hatchCommitPending = store.pendingHatch() != null;
+                try {
+                    repository.recoverPendingHatch();
+                    draft = repository.activeHatchDraft();
+                } catch (IllegalStateException error) {
+                    hatchRecoveryRequired = true;
+                }
+                if (draft != null) {
+                    activeHatchDraft = draft;
+                    hatchCommitPending = hatchCommitPending
+                            && draft.step == HatchDraft.STEP_PREVIEW;
+                    showHatchDraft(draft);
+                } else if (hatchRecoveryRequired) {
+                    showHatchRecoveryFailure();
+                } else if (store.hatchResultPetId() > 0
+                        && repository.pet(store.hatchResultPetId()) != null) {
+                    showHatchSuccessDialog(repository.pet(store.hatchResultPetId()));
+                } else {
+                    showHome();
+                }
             }
         }
     }
@@ -141,21 +187,12 @@ public class MainActivity extends AppCompatActivity {
         shell.setOrientation(LinearLayout.VERTICAL);
         LinearLayout header = new LinearLayout(this);
         header.setGravity(Gravity.CENTER_VERTICAL);
-        title = text("FOCUSGROVE.EXE", 20, ContextCompat.getColor(this, R.color.text_on_button));
+        title = text("FOCUSGROVE.EXE", 20,
+                ContextCompat.getColor(this, R.color.window_title_text));
         title.setTextAppearance(R.style.TextAppearance_FocusPet_Title);
-        title.setTextColor(ContextCompat.getColor(this, R.color.text_on_button));
-        title.setPadding(dp(10), 0, dp(8), 0);
+        title.setTextColor(ContextCompat.getColor(this, R.color.window_title_text));
+        title.setPadding(dp(32), 0, dp(8), 0);
         header.setBackgroundResource(R.drawable.bg_focuspet_window_header);
-        ImageView appIcon = new ImageView(this);
-        appIcon.setImageResource(R.drawable.icon_pet_header);
-        appIcon.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        if (appIcon.getDrawable() instanceof android.graphics.drawable.BitmapDrawable) {
-            ((android.graphics.drawable.BitmapDrawable) appIcon.getDrawable()).setFilterBitmap(false);
-        }
-        appIcon.setContentDescription("FocusPet");
-        LinearLayout.LayoutParams iconParams = new LinearLayout.LayoutParams(dp(34), dp(34));
-        iconParams.setMargins(dp(6), dp(6), dp(4), dp(6));
-        header.addView(appIcon, iconParams);
         header.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
         header.setMinimumHeight(dp(48));
         shell.addView(header);
@@ -269,7 +306,7 @@ public class MainActivity extends AppCompatActivity {
         item.addView(labelView, new LinearLayout.LayoutParams(-1, dp(26)));
         item.setBackground(statefulBackground(
                 ContextCompat.getColor(this, android.R.color.transparent),
-                lavender,
+                navigationSelected,
                 ContextCompat.getColor(this, android.R.color.darker_gray), 2));
         item.setOnClickListener(listener);
         navigationItems.add(item);
@@ -281,7 +318,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void setActiveTab(int index) {
         for (int i = 0; i < navigationItems.size(); i++) {
-            navigationItems.get(i).setBackground(roundColor(i == index ? lavender
+            navigationItems.get(i).setBackground(roundColor(i == index ? navigationSelected
                     : ContextCompat.getColor(this, android.R.color.transparent), 2));
             navigationIcons.get(i).setColorFilter(ContextCompat.getColor(
                     this, i == index ? R.color.text_primary : R.color.text_secondary));
@@ -405,13 +442,10 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void reset(String screenTitle) {
-        if (hatchResultPetId > 0 && !"New pet".equals(screenTitle)) {
-            store.acknowledgeHatchResult();
-            hatchResultPetId = 0;
-        }
         currentScreen = screenTitle;
         renderedDay = LocalDate.now();
         title.setText(screenTitle);
+        clearPetAnimationControllers();
         content.removeAllViews();
         content.setPadding(dp(20), dp(8), dp(20), dp(32));
     }
@@ -465,10 +499,15 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        TextView moreCard = text("More...", 15, purpleDark);
-        moreCard.setBackgroundResource(R.drawable.bg_focuspet_card);
+        TextView moreCard = text("More...", 15,
+                ContextCompat.getColor(this, R.color.text_on_button));
         moreCard.setGravity(Gravity.CENTER);
         moreCard.setTextAppearance(R.style.TextAppearance_FocusPet_Title);
+        moreCard.setTextColor(ContextCompat.getColor(this, R.color.text_on_button));
+        moreCard.setBackground(statefulBackground(
+                ContextCompat.getColor(this, R.color.button_secondary),
+                ContextCompat.getColor(this, R.color.button_secondary_pressed),
+                ContextCompat.getColor(this, R.color.button_primary_disabled), 3));
         moreCard.setPadding(dp(12), dp(14), dp(12), dp(14));
         LinearLayout.LayoutParams moreParams = new LinearLayout.LayoutParams(-1, -2);
         moreParams.setMargins(0, dp(12), 0, dp(8));
@@ -479,11 +518,10 @@ public class MainActivity extends AppCompatActivity {
     private View companionCard() {
         View card = LayoutInflater.from(this).inflate(R.layout.item_pet_card, content, false);
         Pet pet = repository.selectedPet();
-        String petName = pet == null ? "Mochi" : pet.name;
-        String species = pet == null ? "Fox" : pet.species;
+        String petName = pet == null ? "Toast" : pet.name;
         int petLevel = pet == null ? store.level() : pet.level();
         int petXp = pet == null ? store.experience() : pet.experience;
-        configurePetCard(card, pet, petName + " the " + species,
+        configurePetCard(card, pet, petName,
                 "Level " + petLevel + "  ·  " + petXp + " XP",
                 "Your companion",
                 petXp % 100, 1f, v -> showCompanionChooser());
@@ -621,7 +659,7 @@ public class MainActivity extends AppCompatActivity {
         content.addView(encouragement);
         Button end = outlineButton("End session", v -> showEndSessionConfirmation());
         content.addView(end);
-        content.addView(petAnimationSlot(companion));
+        content.addView(petAnimationSlot(companion, PetAnimationController.Mode.AMBIENT));
         timerReceiver = new BroadcastReceiver() {
             @Override public void onReceive(Context context, Intent intent) {
                 if (FocusService.ACTION_TICK.equals(intent.getAction())) {
@@ -769,14 +807,14 @@ public class MainActivity extends AppCompatActivity {
         content.addView(screen);
 
         LinearLayout resourceBar = screen.findViewById(R.id.resource_bar);
-        addResourceChip(resourceBar, "●\nCoins\n" + store.coins(), "Coins",
+        addResourceChip(resourceBar, R.drawable.icon_coin, "Coins " + store.coins(), "Coins",
                 "You have " + store.coins() + " Coins.\n"
                         + "Earned by completing focus sessions. Spend them on clothing and decorations in the Shop.");
-        addResourceChip(resourceBar, "✦\nEssence\n" + store.lifeEssence(), "Life Essence",
+        addResourceChip(resourceBar, R.drawable.icon_essence, "Essence " + store.lifeEssence(), "Life Essence",
                 "You have " + store.lifeEssence() + " Life Essence.\n"
                         + "Earned through focus. Hatching one Pet Egg costs 100 Essence. "
                         + "Pet Eggs drop from focus sessions over time.");
-        addResourceChip(resourceBar, "Eggs  " + store.petEggs(), "Pet Eggs", null);
+        addResourceChip(resourceBar, R.drawable.icon_eggs, "Eggs " + store.petEggs(), "Pet Eggs", null);
         Button shop = button("Shop", v -> showShop());
         shop.setId(R.id.open_shop);
         screen.addView(shop, 1);
@@ -785,7 +823,7 @@ public class MainActivity extends AppCompatActivity {
         Pet selected = repository.selectedPet();
         for (Pet pet : repository.pets()) {
             View card = LayoutInflater.from(this).inflate(R.layout.item_pet_card, ownedPets, false);
-            configurePetCard(card, pet, pet.name + " the " + pet.species,
+            configurePetCard(card, pet, pet.name,
                     pet.rarity + " - Level " + pet.level(),
                     pet.id == (selected == null ? -1 : selected.id)
                             ? "Selected companion - Tap for details" : "Tap for details",
@@ -794,11 +832,14 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void addResourceChip(LinearLayout parent, String label, String title, String description) {
-        TextView chip = (TextView) LayoutInflater.from(this)
+    private void addResourceChip(LinearLayout parent, int iconResource, String label,
+                                 String title, String description) {
+        LinearLayout chip = (LinearLayout) LayoutInflater.from(this)
                 .inflate(R.layout.item_resource_chip, parent, false);
-        chip.setText(label);
-        chip.setText(label.replace("\n", "  "));
+        if ("Pet Eggs".equals(title)) chip.setId(R.id.pet_eggs_chip);
+        ((ImageView) chip.findViewById(R.id.resource_chip_icon)).setImageResource(iconResource);
+        ((TextView) chip.findViewById(R.id.resource_chip_label)).setText(label);
+        chip.setContentDescription(label);
         chip.setOnClickListener(v -> {
             if ("Pet Eggs".equals(title)) {
                 showHatching();
@@ -839,8 +880,10 @@ public class MainActivity extends AppCompatActivity {
         View art = screen.findViewById(R.id.pet_animation_container);
         art.setBackgroundResource(R.drawable.bg_focuspet_image_placeholder);
         bindPetAnimation(art, pet);
+        PetAnimationController animationController = registerPetAnimation(
+                art, pet, PetAnimationController.Mode.INTERACTIVE);
         ((TextView) screen.findViewById(R.id.pet_detail_name))
-                .setText(pet.name + " the " + pet.species);
+                .setText(pet.name);
         ((TextView) screen.findViewById(R.id.pet_detail_meta)).setText(
                 petDetailMeta(pet));
         ((ProgressBar) screen.findViewById(R.id.pet_detail_progress))
@@ -856,9 +899,12 @@ public class MainActivity extends AppCompatActivity {
         TextView feedback = text("Give your pet a short break between interactions.", 14, ContextCompat.getColor(this, R.color.text_secondary));
         feedback.setId(R.id.pet_interaction_feedback);
         actions.addView(feedback);
-        addInteraction(actions, screen, petId, "Pet", R.id.pet_interaction_pet, PetInteraction.Action.PET, feedback);
-        addInteraction(actions, screen, petId, "Play", R.id.pet_interaction_play, PetInteraction.Action.PLAY, feedback);
-        addInteraction(actions, screen, petId, "Rest", R.id.pet_interaction_rest, PetInteraction.Action.REST, feedback);
+        addInteraction(actions, screen, petId, "Pet", R.id.pet_interaction_pet,
+                PetInteraction.Action.PET, feedback, animationController);
+        addInteraction(actions, screen, petId, "Play", R.id.pet_interaction_play,
+                PetInteraction.Action.PLAY, feedback, animationController);
+        addInteraction(actions, screen, petId, "Rest", R.id.pet_interaction_rest,
+                PetInteraction.Action.REST, feedback, animationController);
         Button wardrobe = button("Customize", v -> showWardrobe(petId));
         wardrobe.setId(R.id.open_wardrobe);
         actions.addView(wardrobe);
@@ -866,11 +912,12 @@ public class MainActivity extends AppCompatActivity {
 
     private void showHatching() {
         reset("Pet Egg hatching");
+        setSessionLock(false);
         setActiveTab(1);
         LinearLayout screen = (LinearLayout) LayoutInflater.from(this)
                 .inflate(R.layout.screen_hatching, content, false);
+        addHatchBackButton(v -> showCollection(), true);
         content.addView(screen);
-        screen.findViewById(R.id.hatching_back).setOnClickListener(v -> showCollection());
 
         int eggs = store.petEggs();
         int essence = store.lifeEssence();
@@ -879,19 +926,232 @@ public class MainActivity extends AppCompatActivity {
                 "Pet Eggs: " + eggs + "\nLife Essence: " + essence + " / 100 required");
         Button hatchButton = screen.findViewById(R.id.hatch_button);
         setAvailable(hatchButton, canHatch);
-        if (store.pendingHatch() != null) hatchButton.setText("Resume hatching");
-        final String requestId = UUID.randomUUID().toString();
+        if (store.pendingHatch() != null) hatchButton.setText("Resume customization");
         hatchButton.setOnClickListener(v -> {
-            setAvailable(hatchButton, false);
             try {
-                Pet hatched = repository.hatchPet(requestId);
-                if (hatched != null) showHatchResult(hatched);
-                else { toast("You need 1 Pet Egg and 100 Essence."); showHatching(); }
+                HatchDraft draft = repository.startHatchDraft();
+                if (draft == null) {
+                    toast("You need 1 Pet Egg and 100 Essence.");
+                    return;
+                }
+                activeHatchDraft = draft;
+                hatchRecoveryRequired = false;
+                hatchCommitPending = store.pendingHatch() != null
+                        && draft.step == HatchDraft.STEP_PREVIEW;
+                showHatchDraft(draft);
             } catch (IllegalStateException error) {
-                toast("Hatching was interrupted. Please try again.");
-                showHatching();
+                toast("Unable to start pet customization. Please try again.");
             }
         });
+    }
+
+    private void addHatchBackButton(View.OnClickListener listener, boolean enabled) {
+        TextView back = text("<", 22, ContextCompat.getColor(this, R.color.text_primary));
+        back.setId(R.id.hatching_back);
+        back.setContentDescription("Back");
+        back.setGravity(Gravity.CENTER);
+        back.setBackgroundResource(R.drawable.bg_focuspet_back);
+        back.setMinHeight(dp(48));
+        back.setPadding(dp(12), 0, dp(12), 0);
+        back.setEnabled(enabled);
+        back.setOnClickListener(listener);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(48), dp(48));
+        params.bottomMargin = dp(8);
+        content.addView(back, params);
+    }
+
+    private void showHatchDraft(HatchDraft draft) {
+        activeHatchDraft = draft;
+        hatchRecoveryRequired = false;
+        setSessionLock(true);
+        switch (draft.step) {
+            case HatchDraft.STEP_NAME:
+                showHatchName(draft);
+                break;
+            case HatchDraft.STEP_APPEARANCE:
+                showHatchAppearance(draft);
+                break;
+            case HatchDraft.STEP_PREVIEW:
+                showHatchPreview(draft);
+                break;
+            default:
+                throw new IllegalStateException("Unknown hatch customization step");
+        }
+    }
+
+    private void showHatchName(HatchDraft draft) {
+        reset("Name your pet");
+        setSessionLock(true);
+        setActiveTab(1);
+        View screen = LayoutInflater.from(this).inflate(R.layout.screen_hatch_name, content, false);
+        content.addView(screen);
+        hatchNameInput = screen.findViewById(R.id.hatch_name_input);
+        hatchNameInput.setFilters(new InputFilter[]{new InputFilter.LengthFilter(40)});
+        hatchNameInput.setText(draft.name == null ? "" : draft.name);
+        hatchNameInput.setTypeface(Typeface.DEFAULT);
+        Button next = button("Continue", v -> {
+            try {
+                activeHatchDraft = repository.advanceHatchName(draft.id,
+                        hatchNameInput.getText().toString());
+                hatchNameInput = null;
+                showHatchAppearance(activeHatchDraft);
+            } catch (IllegalArgumentException error) {
+                hatchNameInput.setError(error.getMessage());
+            } catch (IllegalStateException error) {
+                toast("Unable to save the pet name. Please try again.");
+            }
+        });
+        content.addView(next);
+    }
+
+    private void showHatchAppearance(HatchDraft draft) {
+        hatchNameInput = null;
+        reset("Choose appearance");
+        setSessionLock(true);
+        setActiveTab(1);
+        View screen = LayoutInflater.from(this)
+                .inflate(R.layout.screen_hatch_appearance, content, false);
+        addHatchBackButton(v -> moveBackInHatchFlow(), true);
+        content.addView(screen);
+        View preview = screen.findViewById(R.id.hatch_appearance_preview);
+        Pet previewPet = hatchPreviewPet(draft);
+        PetLook selectedLook = PetLook.fromKey(draft.appearanceKey);
+        if (selectedLook == null || selectedLook == PetLook.ORIGINAL
+                || !store.isPetLookUnlocked(selectedLook.key)) {
+            selectedLook = PetLook.CLASSIC;
+        }
+        bindPetLook(preview, previewPet, selectedLook);
+
+        RadioGroup options = screen.findViewById(R.id.hatch_appearance_options);
+        for (PetLook look : PetLook.values()) {
+            if (look == PetLook.ORIGINAL || !store.isPetLookUnlocked(look.key)
+                    || !look.canChoose(previewPet)) continue;
+            RadioButton option = new RadioButton(this);
+            option.setId(View.generateViewId());
+            option.setTag(look);
+            option.setText(getString(look.label));
+            option.setMinHeight(dp(48));
+            options.addView(option);
+            if (look == selectedLook) options.check(option.getId());
+        }
+        options.setOnCheckedChangeListener((group, checkedId) -> {
+            View checked = group.findViewById(checkedId);
+            if (checked == null) return;
+            PetLook look = (PetLook) checked.getTag();
+            try {
+                activeHatchDraft = repository.updateHatchAppearance(draft.id, look.key);
+                bindPetLook(preview, previewPet, look);
+            } catch (IllegalStateException error) {
+                toast("Unable to save this appearance. Please try again.");
+            }
+        });
+
+        content.addView(button("Preview pet", v -> {
+            try {
+                activeHatchDraft = repository.advanceHatchAppearance(draft.id);
+                showHatchPreview(activeHatchDraft);
+            } catch (IllegalStateException error) {
+                toast("Choose an appearance before continuing.");
+            }
+        }));
+    }
+
+    private void showHatchPreview(HatchDraft draft) {
+        hatchNameInput = null;
+        reset("Preview your pet");
+        setSessionLock(true);
+        setActiveTab(1);
+        View screen = LayoutInflater.from(this).inflate(R.layout.screen_hatch_preview, content, false);
+        addHatchBackButton(v -> moveBackInHatchFlow(), !hatchCommitPending);
+        content.addView(screen);
+        ((TextView) screen.findViewById(R.id.hatch_preview_name)).setText(draft.name);
+        PetLook look = PetLook.fromKey(draft.appearanceKey);
+        bindPetLook(screen.findViewById(R.id.hatch_final_preview),
+                hatchPreviewPet(draft), look == null ? PetLook.CLASSIC : look);
+        Button confirm = button(hatchCommitPending
+                ? "Retry confirmed hatch" : "Confirm and add to collection", v -> {
+            Button confirmButton = (Button) v;
+            hatchCommitPending = true;
+            setAvailable(confirmButton, false);
+            try {
+                Pet created = repository.confirmHatch(draft.id);
+                if (created == null) {
+                    hatchCommitPending = false;
+                    setAvailable(confirmButton, true);
+                    toast("You need 1 Pet Egg and 100 Essence.");
+                    return;
+                }
+                activeHatchDraft = null;
+                hatchNameInput = null;
+                hatchCommitPending = false;
+                showHatchSuccessDialog(created);
+            } catch (IllegalArgumentException | IllegalStateException error) {
+                hatchCommitPending = store.pendingHatch() != null;
+                if (hatchCommitPending) {
+                    showHatchPreview(activeHatchDraft);
+                    toast("Hatch confirmation is saved. Retry to finish safely.");
+                } else {
+                    setAvailable(confirmButton, true);
+                    toast("Unable to confirm the hatch. Please try again.");
+                }
+            }
+        });
+        content.addView(confirm);
+    }
+
+    private Pet hatchPreviewPet(HatchDraft draft) {
+        Pet pet = new Pet();
+        pet.name = draft.name;
+        pet.species = "Pet";
+        pet.appearanceData = draft.appearanceKey;
+        pet.imageKey = draft.appearanceKey;
+        return pet;
+    }
+
+    private void moveBackInHatchFlow() {
+        if (activeHatchDraft == null || hatchCommitPending) return;
+        if (activeHatchDraft.step == HatchDraft.STEP_NAME) {
+            toast("Enter a name to continue customizing your pet.");
+            return;
+        }
+        try {
+            activeHatchDraft = repository.moveHatchDraftBack(activeHatchDraft.id);
+            showHatchDraft(activeHatchDraft);
+        } catch (IllegalStateException error) {
+            toast("Unable to return to the previous customization step.");
+        }
+    }
+
+    private void showHatchRecoveryFailure() {
+        reset("Finishing hatch");
+        setSessionLock(true);
+        setActiveTab(1);
+        content.addView(systemText("Your confirmed hatch is safe, but could not be completed yet.",
+                17, ContextCompat.getColor(this, R.color.text_secondary)));
+        content.addView(button("Retry", v -> retryHatchRecovery()));
+    }
+
+    private void retryHatchRecovery() {
+        try {
+            hatchRecoveryRequired = false;
+            Pet pet = repository.recoverPendingHatch();
+            HatchDraft draft = repository.activeHatchDraft();
+            if (draft != null) {
+                activeHatchDraft = draft;
+                hatchCommitPending = store.pendingHatch() != null
+                        && draft.step == HatchDraft.STEP_PREVIEW;
+                showHatchDraft(draft);
+            } else if (pet != null || store.hatchResultPetId() > 0) {
+                Pet result = pet != null ? pet : repository.pet(store.hatchResultPetId());
+                if (result != null) showHatchSuccessDialog(result);
+                else showHatchRecoveryFailure();
+            } else {
+                showHome();
+            }
+        } catch (IllegalStateException error) {
+            hatchRecoveryRequired = true;
+            showHatchRecoveryFailure();
+        }
     }
 
     private void toast(String message) {
@@ -924,9 +1184,11 @@ public class MainActivity extends AppCompatActivity {
                 ContextCompat.getColor(this, R.color.button_primary),
                 ContextCompat.getColor(this, R.color.button_primary_pressed),
                 ContextCompat.getColor(this, R.color.button_primary_disabled), 3));
+        button.setBackgroundTintList(available ? null
+                : android.content.res.ColorStateList.valueOf(Color.rgb(218, 218, 218)));
         button.setTextColor(available
                 ? ContextCompat.getColor(this, R.color.text_on_button)
-                : ContextCompat.getColor(this, R.color.text_secondary));
+                : Color.rgb(105, 105, 105));
         button.setTypeface(pixelFont);
         button.setTextSize(TypedValue.COMPLEX_UNIT_PX,
                 getResources().getDimension(R.dimen.text_size_18));
@@ -941,9 +1203,36 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private View petAnimationSlot(Pet pet) {
+        return petAnimationSlot(pet, null);
+    }
+
+    private View petAnimationSlot(Pet pet, PetAnimationController.Mode mode) {
         View slot = LayoutInflater.from(this).inflate(R.layout.view_pet_animation, content, false);
         bindPetAnimation(slot, pet);
+        if (mode != null) registerPetAnimation(slot, pet, mode);
         return slot;
+    }
+
+    private PetAnimationController registerPetAnimation(
+            View host, Pet pet, PetAnimationController.Mode mode) {
+        PetAnimationController controller = new PetAnimationController(
+                host,
+                host.findViewById(R.id.pet_artwork_layer),
+                host.findViewById(R.id.pet_expression_overlay),
+                mode);
+        if (pet != null) {
+            controller.setRestingExpression(PetExpression.forState(pet.mood, pet.energy));
+        }
+        petAnimationControllers.add(controller);
+        if (petAnimationsResumed) controller.resume();
+        return controller;
+    }
+
+    private void clearPetAnimationControllers() {
+        for (PetAnimationController controller : petAnimationControllers) {
+            controller.dispose();
+        }
+        petAnimationControllers.clear();
     }
 
     private void bindPetAnimation(View slot, Pet pet) {
@@ -951,17 +1240,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void bindPetLook(View slot, Pet pet, PetLook look) {
-        slot.setTag(pet == null ? null : pet.id);
-        ImageView art = slot.findViewById(R.id.pet_animation_image);
-        art.setTag(pet == null ? null : pet.imageKey);
-        int artwork = look.artworkFor(pet);
-        art.setImageResource(artwork);
-        art.setVisibility(artwork != 0 ? View.VISIBLE : View.GONE);
-        TextView placeholder = slot.findViewById(R.id.pet_animation_placeholder);
-        String name = pet == null || pet.name == null ? getString(R.string.pet_look_generic_name) : pet.name;
-        placeholder.setText(getString(R.string.pet_look_placeholder, name));
-        placeholder.setVisibility(artwork == 0 ? View.VISIBLE : View.GONE);
-        slot.setContentDescription(getString(R.string.pet_look_description, name, getString(look.label)));
+        petArtworkRenderer.bind(slot, pet, look);
     }
 
     private void showPetLookPicker(long petId, View displayedArt) {
@@ -972,6 +1251,7 @@ public class MainActivity extends AppCompatActivity {
         RadioGroup options = picker.findViewById(R.id.pet_look_options);
         PetLook currentLook = PetLook.forPet(pet);
         for (PetLook look : PetLook.values()) {
+            if (look != currentLook && !store.isPetLookUnlocked(look.key)) continue;
             if (!look.canChoose(pet) && look != currentLook) continue;
             RadioButton option = new RadioButton(this);
             option.setId(View.generateViewId());
@@ -999,28 +1279,18 @@ public class MainActivity extends AppCompatActivity {
                 }));
     }
 
-    private void showHatchResult(Pet pet) {
-        reset("New pet");
-        hatchResultPetId = pet.id;
+    private void showHatchSuccessDialog(Pet pet) {
+        activeHatchDraft = null;
+        hatchNameInput = null;
+        hatchRecoveryRequired = false;
+        hatchCommitPending = false;
         setSessionLock(false);
-        setActiveTab(1);
-        View screen = LayoutInflater.from(this).inflate(R.layout.screen_hatch_result, content, false);
-        content.addView(screen);
-        ((TextView) screen.findViewById(R.id.hatch_result_name)).setText(pet.name + " the " + pet.species);
-        ((TextView) screen.findViewById(R.id.hatch_result_meta)).setText(
-                "Hatched successfully\n" + pet.rarity + " - Level " + pet.level());
-        View art = screen.findViewById(R.id.pet_animation_container);
-        bindPetAnimation(art, pet);
-        LinearLayout actions = screen.findViewById(R.id.hatch_result_actions);
-        Button select = button("Choose as companion", v -> {
-            repository.selectPet(pet.id);
-            showHome();
-        });
-        select.setId(R.id.hatch_result_select);
-        actions.addView(select);
-        actions.addView(outlineButton(getString(R.string.pet_look_choose), v -> showPetLookPicker(pet.id, art)));
-        actions.addView(button("View pet", v -> showPetDetail(pet)));
-        actions.addView(outlineButton("Back to collection", v -> showCollection()));
+        showCollection();
+        showDefaultFontDialog(new AlertDialog.Builder(this)
+                .setTitle("Hatched successfully!")
+                .setMessage(pet.name + " has been added to your Collection.")
+                .setPositiveButton("OK", (dialog, which) -> store.acknowledgeHatchResult())
+                .setCancelable(false));
     }
 
     private String petDetailMeta(Pet pet) {
@@ -1030,20 +1300,27 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void addInteraction(LinearLayout parent, View screen, long petId, String label, int id,
-                                PetInteraction.Action action, TextView feedback) {
+                                PetInteraction.Action action, TextView feedback,
+                                PetAnimationController animationController) {
         Button control = outlineButton(label, v -> {
             FocusRepository.InteractionResult result = repository.interact(petId, action);
             Pet updated = repository.pet(petId);
             if (updated == null) { showCollection(); return; }
             ((TextView) screen.findViewById(R.id.pet_detail_meta)).setText(petDetailMeta(updated));
+            animationController.setRestingExpression(
+                    PetExpression.forState(updated.mood, updated.energy));
             switch (result) {
                 case UPDATED:
+                    animationController.playInteraction(action);
                     feedback.setText(action == PetInteraction.Action.PET ? updated.name + " enjoyed being petted."
                             : action == PetInteraction.Action.PLAY ? updated.name + " enjoyed playing with you."
                             : updated.name + " rested and recovered energy.");
                     break;
                 case COOLDOWN: feedback.setText("Please wait a few seconds before another interaction."); break;
-                case LOW_ENERGY: feedback.setText("Your pet needs to rest before playing again."); break;
+                case LOW_ENERGY:
+                    animationController.showTransientExpression(PetExpression.TIRED, 1600L);
+                    feedback.setText("Your pet needs to rest before playing again.");
+                    break;
                 default: feedback.setText("This pet is no longer available.");
             }
         });
@@ -1052,50 +1329,218 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void showShop() {
+        showShop(ShopCategory.ALL);
+    }
+
+    private void showShop(ShopCategory category) {
+        selectedShopCategory = category;
         reset("Shop");
         setSessionLock(false);
         setActiveTab(1);
         content.addView(outlineButton("Back to collection", v -> showCollection()));
-        TextView balance = text("Coins: " + store.coins() + "\nEssence: " + store.lifeEssence()
-                + "\nPet Eggs: " + store.petEggs(), 18, ContextCompat.getColor(this, R.color.text_secondary));
+        LinearLayout balanceRow = new LinearLayout(this);
+        balanceRow.setOrientation(LinearLayout.HORIZONTAL);
+        balanceRow.setGravity(Gravity.CENTER_VERTICAL);
+        ImageView coinIcon = new ImageView(this);
+        coinIcon.setId(R.id.shop_balance_icon);
+        coinIcon.setImageResource(R.drawable.icon_coin);
+        coinIcon.setContentDescription("Coins");
+        balanceRow.addView(coinIcon, new LinearLayout.LayoutParams(dp(24), dp(24)));
+        TextView balance = text("Coins: " + store.coins(), 16,
+                ContextCompat.getColor(this, R.color.text_secondary));
         balance.setId(R.id.shop_balance);
-        content.addView(balance);
-        content.addView(systemText("Coins buy clothing and decorations.\n"
-                + "Pet Eggs drop from focus sessions. Hatching costs one egg and 100 Essence.", 15, ContextCompat.getColor(this, R.color.text_secondary)));
-        for (ShopProduct product : ShopCatalog.PRODUCTS) {
-            LinearLayout row = new LinearLayout(this);
-            row.setOrientation(LinearLayout.VERTICAL);
-            row.addView(text(product.name, 19, purpleDark));
-            boolean cosmetic = product.productType == ProductType.COSMETIC;
-            boolean owned = cosmetic && store.ownedCosmeticIds().contains(product.itemKey);
-            String currency = product.currency == Currency.COINS ? "Coins" : "Essence";
-            boolean enough = (product.currency == Currency.COINS ? store.coins() : store.lifeEssence()) >= product.price;
-            String label = owned ? "Owned" : enough ? "Buy " + product.price + " " + currency
-                    : "Need " + product.price + " " + currency;
-            Button buy = button(label, v -> confirmPurchase(product));
-            buy.setTag("buy_" + product.id);
-            setAvailable(buy, !owned && enough);
-            row.addView(buy);
-            if (cosmetic) row.addView(text("Permanently unlocked for your pets.", 14, ContextCompat.getColor(this, R.color.text_secondary)));
-            content.addView(row);
+        LinearLayout.LayoutParams balanceTextParams = new LinearLayout.LayoutParams(-2, -2);
+        balanceTextParams.setMargins(dp(6), 0, 0, 0);
+        balanceRow.addView(balance, balanceTextParams);
+        LinearLayout.LayoutParams balanceRowParams = new LinearLayout.LayoutParams(-1, -2);
+        balanceRowParams.setMargins(dp(8), dp(10), 0, dp(8));
+        content.addView(balanceRow, balanceRowParams);
+        content.addView(systemText("Unlock pet appearances with Coins.",
+                14, ContextCompat.getColor(this, R.color.text_secondary)));
+        addShopCategories();
+        List<ShopProductEntity> products = new ArrayList<>();
+        for (ShopProductEntity product : shopRepository.availableProducts()) {
+            if (category.includes(product)) products.add(product);
+        }
+        Set<String> ownedPetLooks = store.ownedPetLookKeys();
+        products.sort((first, second) -> Boolean.compare(
+                ownedPetLooks.contains(first.itemKey), ownedPetLooks.contains(second.itemKey)));
+        if (products.isEmpty()) {
+            content.addView(systemText("No items in this category yet.", 16,
+                    ContextCompat.getColor(this, R.color.text_secondary)));
+        }
+        LinearLayout row = null;
+        for (int i = 0; i < products.size(); i++) {
+            if (i % 2 == 0) {
+                row = new LinearLayout(this);
+                row.setOrientation(LinearLayout.HORIZONTAL);
+                LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(-1, -2);
+                rowParams.setMargins(0, dp(4), 0, dp(4));
+                content.addView(row, rowParams);
+            }
+            View card = shopProductCard(products.get(i));
+            LinearLayout.LayoutParams cardParams = new LinearLayout.LayoutParams(0, -2, 1);
+            cardParams.setMargins(dp(4), 0, dp(4), 0);
+            row.addView(card, cardParams);
+            if (i == products.size() - 1 && products.size() % 2 != 0) {
+                row.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1));
+            }
         }
         Pet selected = repository.selectedPet();
         if (selected != null) content.addView(button("Customize companion", v -> showWardrobe(selected.id)));
     }
 
-    private void confirmPurchase(ShopProduct product) {
+    private void addShopCategories() {
+        HorizontalScrollView scroll = new HorizontalScrollView(this);
+        scroll.setHorizontalScrollBarEnabled(false);
+        LinearLayout categories = new LinearLayout(this);
+        categories.setOrientation(LinearLayout.HORIZONTAL);
+        for (ShopCategory category : ShopCategory.values()) {
+            TextView tab = text(category.label, 14, ContextCompat.getColor(this,
+                    category == selectedShopCategory ? R.color.text_on_button : R.color.text_primary));
+            tab.setGravity(Gravity.CENTER);
+            tab.setPadding(dp(12), dp(8), dp(12), dp(8));
+            tab.setBackground(roundColor(ContextCompat.getColor(this,
+                    category == selectedShopCategory ? R.color.button_primary : R.color.background_card), 12));
+            LinearLayout.LayoutParams tabParams = new LinearLayout.LayoutParams(-2, -2);
+            tabParams.setMargins(0, 0, dp(8), 0);
+            categories.addView(tab, tabParams);
+            tab.setOnClickListener(v -> showShop(category));
+        }
+        scroll.addView(categories);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
+        params.setMargins(0, dp(8), 0, dp(8));
+        content.addView(scroll, params);
+    }
+
+    private View shopProductCard(ShopProductEntity product) {
+        ProductType type = ProductType.valueOf(product.productType);
+        boolean owned = isShopProductOwned(product);
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(dp(8), dp(8), dp(8), dp(8));
+        card.setBackground(borderedColor(ContextCompat.getColor(this, R.color.background_card),
+                ContextCompat.getColor(this, R.color.button_outline), 1, 8));
+
+        FrameLayout artworkFrame = new FrameLayout(this);
+        artworkFrame.setBackground(roundColor(ContextCompat.getColor(this, R.color.background_accent), 6));
+        LinearLayout.LayoutParams artworkParams = new LinearLayout.LayoutParams(-1, dp(128));
+        artworkParams.setMargins(0, 0, 0, dp(8));
+        card.addView(artworkFrame, artworkParams);
+        if (type == ProductType.PET_LOOK) {
+            PetLook look = PetLook.fromKey(product.itemKey);
+            if (look == null || look.artworkFor(null) == 0) {
+                throw new IllegalStateException("Shop product references an unknown pet look: " + product.itemKey);
+            }
+            addPetLookArtwork(artworkFrame, look, product, owned, "pet_look_art_");
+        } else {
+            TextView placeholder = text(product.categoryKey, 14,
+                    ContextCompat.getColor(this, R.color.text_secondary));
+            placeholder.setGravity(Gravity.CENTER);
+            placeholder.setContentDescription(product.name + " preview");
+            artworkFrame.addView(placeholder, new FrameLayout.LayoutParams(-1, -1));
+        }
+
+        TextView name = text(product.name, 16, purpleDark);
+        name.setMaxLines(2);
+        card.addView(name);
+
+        String currency = Currency.valueOf(product.currency) == Currency.COINS ? "Coins" : "Essence";
+        long balance = Currency.valueOf(product.currency) == Currency.COINS
+                ? store.coins() : store.lifeEssence();
+        boolean enough = balance >= product.price;
+        TextView price = text(product.price + " " + currency, 14,
+                ContextCompat.getColor(this, R.color.text_primary));
+        LinearLayout.LayoutParams priceParams = new LinearLayout.LayoutParams(-1, -2);
+        priceParams.setMargins(0, dp(6), 0, dp(4));
+        card.addView(price, priceParams);
+
+        String label = owned ? "Owned" : enough ? "Buy" : "Not enough " + currency;
+        Button buy = button(label, v -> confirmPurchase(product));
+        buy.setTag("buy_" + product.id);
+        setAvailable(buy, !owned && enough);
+        card.addView(buy, new LinearLayout.LayoutParams(-1, dp(44)));
+        return card;
+    }
+
+    private void confirmPurchase(ShopProductEntity product) {
         String requestId = UUID.randomUUID().toString();
-        showDefaultFontDialog(new AlertDialog.Builder(this).setTitle("Buy " + product.name + "?")
-                .setMessage(product.price + (product.currency == Currency.COINS ? " Coins" : " Essence"))
+        LinearLayout confirmation = new LinearLayout(this);
+        confirmation.setOrientation(LinearLayout.VERTICAL);
+        confirmation.setGravity(Gravity.CENTER_HORIZONTAL);
+        confirmation.setPadding(dp(16), 0, dp(16), 0);
+        confirmation.addView(shopProductArtwork(product, dp(112)));
+        confirmation.addView(text(product.price + " "
+                + (Currency.valueOf(product.currency) == Currency.COINS ? "Coins" : "Essence"),
+                16, purpleDark));
+        String title = ProductType.valueOf(product.productType) == ProductType.PET_LOOK
+                ? "Unlock " + product.name + "?" : "Buy " + product.name + "?";
+        String benefit = ProductType.valueOf(product.productType) == ProductType.PET_LOOK
+                ? "This appearance will be unlocked for all your pets."
+                : "This item will be permanently unlocked for your pets.";
+        confirmation.addView(systemText(benefit, 14,
+                ContextCompat.getColor(this, R.color.text_secondary)));
+        showDefaultFontDialog(new AlertDialog.Builder(this).setTitle(title)
+                .setView(confirmation)
                 .setNegativeButton("Cancel", null)
                 .setPositiveButton("Buy", (dialog, which) -> {
-                    FocusStore.PurchaseResult result = store.purchase(product.id, requestId);
+                    FocusStore.PurchaseResult result = shopRepository.purchase(product.id, requestId);
                     if (result == FocusStore.PurchaseResult.PURCHASED) toast("Purchased " + product.name + ".");
                     else if (result == FocusStore.PurchaseResult.ALREADY_OWNED) toast("You already own this item.");
                     else if (result == FocusStore.PurchaseResult.INSUFFICIENT_RESOURCES) toast("Not enough resources.");
                     else toast("Purchase could not be saved. Please try again.");
-                    showShop();
+                    showShop(selectedShopCategory);
                 }));
+    }
+
+    private View shopProductArtwork(ShopProductEntity product, int size) {
+        FrameLayout frame = new FrameLayout(this);
+        frame.setBackground(roundColor(ContextCompat.getColor(this, R.color.background_accent), 6));
+        frame.setLayoutParams(new LinearLayout.LayoutParams(size, size));
+        if (ProductType.valueOf(product.productType) == ProductType.PET_LOOK) {
+            PetLook look = PetLook.fromKey(product.itemKey);
+            if (look == null || look.artworkFor(null) == 0) {
+                throw new IllegalStateException("Shop product references an unknown pet look: " + product.itemKey);
+            }
+            addPetLookArtwork(frame, look, product, isShopProductOwned(product),
+                    "pet_look_dialog_art_");
+        } else {
+            TextView placeholder = text(product.categoryKey, 14,
+                    ContextCompat.getColor(this, R.color.text_secondary));
+            placeholder.setGravity(Gravity.CENTER);
+            frame.addView(placeholder, new FrameLayout.LayoutParams(-1, -1));
+        }
+        return frame;
+    }
+
+    private void addPetLookArtwork(FrameLayout frame, PetLook look,
+                                   ShopProductEntity product, boolean owned, String tagPrefix) {
+        ImageView image = new ImageView(this);
+        image.setImageResource(look.artworkFor(null));
+        image.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        image.setTag(tagPrefix + product.itemKey);
+        image.setContentDescription(owned ? getString(look.label)
+                : getString(R.string.shop_unrevealed_pet_look));
+        if (!owned) {
+            image.setRenderEffect(RenderEffect.createBlurEffect(
+                    dp(14), dp(14), Shader.TileMode.CLAMP));
+        }
+        frame.addView(image, new FrameLayout.LayoutParams(-1, -1));
+        if (!owned) {
+            View veil = new View(this);
+            veil.setBackgroundColor(Color.argb(24, 247, 243, 228));
+            veil.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            frame.addView(veil, new FrameLayout.LayoutParams(-1, -1));
+        }
+    }
+
+    private boolean isShopProductOwned(ShopProductEntity product) {
+        ProductType type = ProductType.valueOf(product.productType);
+        if (type == ProductType.PET_LOOK) {
+            return store.ownedPetLookKeys().contains(product.itemKey);
+        }
+        return type == ProductType.COSMETIC
+                && store.ownedCosmeticIds().contains(product.itemKey);
     }
 
     private void showWardrobe(long petId) {
@@ -1137,7 +1582,7 @@ public class MainActivity extends AppCompatActivity {
                 Pet selected = repository.selectedPet();
                 for (Pet pet : repository.pets()) {
                     View card = LayoutInflater.from(this).inflate(R.layout.item_pet_card, container, false);
-                    configurePetCard(card, pet, pet.name + " the " + pet.species,
+                    configurePetCard(card, pet, pet.name,
                             pet.rarity + " - Level " + pet.level(),
                             pet.id == (selected == null ? -1 : selected.id)
                                     ? "Selected companion - Tap to keep" : "Tap to select",
@@ -1377,17 +1822,35 @@ public class MainActivity extends AppCompatActivity {
 
     @Override protected void onResume() {
         super.onResume();
+        petAnimationsResumed = true;
         refreshCalendarScreen();
+        for (PetAnimationController controller : petAnimationControllers) {
+            controller.resume();
+        }
         scheduleCalendarRefresh();
     }
 
     @Override protected void onPause() {
+        petAnimationsResumed = false;
+        for (PetAnimationController controller : petAnimationControllers) {
+            controller.pause();
+        }
         calendarHandler.removeCallbacks(calendarRefresh);
+        if (hatchNameInput != null && activeHatchDraft != null
+                && activeHatchDraft.step == HatchDraft.STEP_NAME) {
+            try {
+                repository.updateHatchDraftName(activeHatchDraft.id,
+                        hatchNameInput.getText().toString());
+            } catch (IllegalStateException error) {
+                android.util.Log.e("FocusPet", "Unable to save hatch name draft", error);
+            }
+        }
         super.onPause();
     }
 
     @Override protected void onDestroy() {
         calendarHandler.removeCallbacks(calendarRefresh);
+        clearPetAnimationControllers();
         if (timerReceiver != null) unregisterReceiver(timerReceiver);
         super.onDestroy();
     }

@@ -15,6 +15,7 @@
         android:minHeight="48dp"
         android:paddingStart="12dp"
         android:paddingEnd="12dp"
+        android:fontFamily="sans"
         android:text="&lt; Back to collection"
         android:textColor="@color/text_primary"
         android:textSize="16sp"
@@ -40,6 +41,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:paddingTop="4dp"
+        android:fontFamily="sans"
         android:textColor="@color/text_secondary"
         android:textSize="18sp" />
 
@@ -58,6 +60,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:paddingTop="18dp"
+        android:fontFamily="sans"
         android:textColor="@color/text_secondary"
         android:textSize="18sp" />
 

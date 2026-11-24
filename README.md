@@ -12,10 +12,11 @@ The current project is an Android MVP for a single local user. It does not requi
 - Finish and reward-claim flow with one-time claim protection.
 - Early-session rewards based on counted whole minutes, with reduced payout for ending early.
 - Randomized coins, Life Essence, and Pet Egg rewards.
-- Pet Egg hatching when the user has one egg and 100 Life Essence.
+- Pet Egg customization flow requiring a name and appearance choice before preview and confirmation; one egg and 100 Life Essence are charged only on confirmation.
 - Persistent pets with names, species, rarity, level, experience, appearance data, hatch date, mood, energy, and selected companion state.
 - Companion selection from the home screen.
 - Collection screen with owned pets and resource inventory.
+- Shop with All and Pet Looks filters, illustrated pet-look cards, and a purchase confirmation step. Locked looks are blurred; owned looks move to the bottom. Seven additional pet looks cost 67 Coins each and unlock globally for all pets.
 - Pet detail screen with experience progress.
 - Statistics summary and clickable focus-history details.
 - Settings, notification permission handling, local reset, and debug-only resource controls.
@@ -28,8 +29,8 @@ The current project is an Android MVP for a single local user. It does not requi
 | Language | Java |
 | UI | Android Views, XML layouts, and programmatic Java composition |
 | Architecture | Feature-oriented prototype with `MainActivity`, repository, store, service, and Room DAOs |
-| Local database | Room 2.7.2 |
-| Preferences | `SharedPreferences` through `FocusStore` |
+| Local database | Room 2.7.2; stores sessions, pets, hatch drafts, and the shop product catalog |
+| Preferences | `SharedPreferences` through `FocusStore`; stores balances, ownership, and purchase receipts |
 | Timer | Android foreground service using `SystemClock.elapsedRealtime()` |
 | Notifications | Android notification channel and foreground notifications |
 | Minimum SDK | API 33 |
@@ -51,6 +52,9 @@ The original project plan mentioned Jetpack Compose, but the current implementat
 - [`FocusService.java`](app/src/main/java/com/example/focuspet/FocusService.java) - Starts, restores, pauses, resumes, and cancels focus sessions; sends timer broadcasts and notifications.
 - [`FocusRepository.java`](app/src/main/java/com/example/focuspet/FocusRepository.java) - Coordinates Room sessions and pets, calculates randomized rewards, completes sessions, and atomically claims rewards.
 - [`FocusStore.java`](app/src/main/java/com/example/focuspet/FocusStore.java) - Stores lightweight account progress, resources, streak values, and active-session state in `SharedPreferences`.
+- [`ShopRepository.java`](app/src/main/java/com/example/focuspet/ShopRepository.java), [`ShopProductEntity.java`](app/src/main/java/com/example/focuspet/ShopProductEntity.java), and [`ShopProductDao.java`](app/src/main/java/com/example/focuspet/ShopProductDao.java) - Seeds and reads the Room-backed shop catalog.
+- [`ShopCatalog.java`](app/src/main/java/com/example/focuspet/ShopCatalog.java), [`PetLookCatalog.java`](app/src/main/java/com/example/focuspet/PetLookCatalog.java), and [`ShopCategory.java`](app/src/main/java/com/example/focuspet/ShopCategory.java) - Define products, appearance offers, and shop categories separately from persistence and UI.
+- [`PetLook.java`](app/src/main/java/com/example/focuspet/PetLook.java) - Maps pet appearance keys to localized labels and drawable resources.
 
 ### Room data model
 
@@ -69,7 +73,8 @@ The original project plan mentioned Jetpack Compose, but the current implementat
 - [`screen_statistics.xml`](app/src/main/res/layout/screen_statistics.xml) - Statistics summary and focus-history containers.
 - [`item_statistics_summary.xml`](app/src/main/res/layout/item_statistics_summary.xml) - Combined time, sessions, current streak, and longest streak card.
 - [`item_session_history.xml`](app/src/main/res/layout/item_session_history.xml) and [`screen_history_detail.xml`](app/src/main/res/layout/screen_history_detail.xml) - History list rows and detail view.
-- [`screen_hatching.xml`](app/src/main/res/layout/screen_hatching.xml) - Pet Egg hatching screen with artwork and future customization space.
+- [`screen_hatching.xml`](app/src/main/res/layout/screen_hatching.xml) and `screen_hatch_*.xml` - Pet Egg entry, name, appearance, and preview screens.
+- [`HatchDraft.java`](app/src/main/java/com/example/focuspet/HatchDraft.java) and [`HatchDraftDao.java`](app/src/main/java/com/example/focuspet/HatchDraftDao.java) - Persisted, resumable Pet Egg customization drafts.
 
 ### Build configuration
 
@@ -126,7 +131,7 @@ The debug build currently compiles successfully. The project includes JUnit and 
 5. The user claims the reward once.
 6. `FocusStore` updates coins, Life Essence, Eggs, total focus time, sessions, and streak progress.
 7. Claimed XP is also added to the selected Room pet.
-8. A Pet Egg consumes one egg and 100 Life Essence, then creates a default pet. Appearance customization is reserved for a later feature.
+8. Pet Egg customization stores a draft without creating a collection pet or consuming resources. Confirmation creates the named pet with the chosen appearance and consumes one egg and 100 Life Essence.
 
 For an early ending, counted focus time is floored to whole minutes. Sessions shorter than one minute do not create a claimable early reward. Early rewards use approximately 30% of the normal numeric rewards, representing an approximate 70% loss.
 
@@ -134,7 +139,7 @@ For an early ending, counted focus time is floored to whole minutes. Sessions sh
 
 - `MainActivity` is still a large controller containing UI, navigation, and event logic.
 - `FocusStore` and Room divide progress data between two persistence systems.
-- Room currently uses `fallbackToDestructiveMigration()`, which can erase Room data after an incompatible schema change.
+- Room schema changes use explicit migrations; unsupported database versions fail rather than silently deleting user data.
 - Several starter XML fragments and navigation dependencies come from the original Android Studio template and are not part of the current primary flow.
 - Pet artwork, animations, sound, vibration settings, and pet customization are placeholders or incomplete.
 - The reward economy and streak rules need more balancing and dedicated tests.
@@ -178,6 +183,6 @@ These are data structures and basic field validations only. Room entities and mi
 
 ## Pet and shop implementation update (2026-11-18)
 
-The app now includes a shop (Coins for clothing/decorations, Essence for Pet Eggs), permanent cosmetic ownership, per-pet equip/remove controls, simple pet interactions, and a dedicated hatch result screen. Hatching continues to consume one egg and 100 Essence. Insufficient-resource hatch buttons are disabled and gray. The focus screen has an animation slot bound to the selected companion; art assets have not been added. The extra four-minute warning was removed, leaving the normal single confirmation.
+The app includes a shop with All and Pet Looks filters, product cards, previews, and a confirmation dialog. Seven additional pet appearances are stored in the Room product catalog and can be purchased for 67 Coins each; ownership remains global in `SharedPreferences` and is granted atomically with the balance deduction and purchase receipt. Pet Egg customization requires a name, appearance choice, and final preview confirmation; resources are charged and the pet is added to the collection only at confirmation. The draft can resume after interruption. Insufficient-resource hatch buttons are disabled and gray. The extra four-minute warning was removed, leaving the normal single confirmation.
 
-Purchases are persisted with duplicate-request protection. Hatching can recover interrupted requests, and Room v4-to-v5 migration preserves existing pets and history. Product and cosmetic types from `data-model` are now used by the Android app; the other standalone model types are still prototypes. See [implementation notes and validation](docs/pet-shop-2026-11-18.md) for initial prices, storage behavior and testing scope.
+Purchases are persisted with duplicate-request protection. Hatching uses a resumable Room draft and a request journal to recover interrupted confirmations without charging twice. Room v4-to-v7 migrations preserve existing pets and history. Product and cosmetic types from `data-model` are used by the Android app; the other standalone model types are still prototypes. See [implementation notes and validation](docs/pet-shop-2026-11-18.md) for initial prices, storage behavior and testing scope.

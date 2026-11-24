@@ -32,6 +32,7 @@
             android:id="@+id/history_label"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:fontFamily="sans"
             android:textColor="@color/text_primary"
             android:textSize="18sp"
             android:textStyle="bold" />
@@ -40,6 +41,7 @@
             android:id="@+id/history_date"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:fontFamily="sans"
             android:textColor="@color/text_secondary"
             android:textSize="17sp" />
     </LinearLayout>
@@ -48,6 +50,7 @@
         android:id="@+id/history_duration"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:fontFamily="sans"
         android:textColor="@color/text_primary"
         android:textSize="18sp"
         android:textStyle="bold" />

@@ -4,25 +4,29 @@
     <color name="text_secondary">#3F423F</color>
     <color name="text_on_button">#242624</color>
 
-    <color name="background_app">#f7f3e4</color>
-    <color name="background_card">#D9D3BD</color>
-    <color name="background_accent">#c3e0fa</color>
+    <color name="background_app">#FFFDF0</color>
+    <color name="background_card">#E7E2D0</color>
+    <color name="background_accent">#B9E4F6</color>
+    <color name="navigation_selected">#D6D1BF</color>
 
-    <color name="button_primary">#ACD56D</color>
-    <color name="button_primary_pressed">#626F3C</color>
-    <color name="button_primary_disabled">#EFF8DB</color>
+    <color name="button_primary">#E498D0</color>
+    <color name="button_primary_pressed">#C185AB</color>
+    <color name="button_primary_disabled">#A9AD9F</color>
+    <color name="button_secondary">#FFF9B7</color>
+    <color name="button_secondary_pressed">#E6DE91</color>
     <color name="button_outline">#2B2F2D</color>
     <color name="button_debug">#2B2F2E</color>
-    <color name="progress_foreground">#8BBFEF</color>
-    <color name="progress_track">#acb39b</color>
+    <color name="progress_foreground">#A5CDF2</color>
+    <color name="progress_track">#7D8374</color>
 
-    <color name="desktop_background">#F1EBD6</color>
-    <color name="window_title">#759DC5</color>
-    <color name="window_title_highlight">#B8D5F2</color>
+    <color name="desktop_background">#FFFDF0</color>
+    <color name="window_title">#364089</color>
+    <color name="window_title_highlight">@color/window_title</color>
+    <color name="window_title_text">#FFFDF0</color>
     <color name="window_border">#273746</color>
-    <color name="window_surface">#F1EBD6</color>
+    <color name="window_surface">#FFFDF0</color>
     <color name="window_shadow">#52615D</color>
-    <color name="taskbar_surface">#D8D5C5</color>
+    <color name="taskbar_surface">@color/background_card</color>
     <color name="taskbar_highlight">#FFFFFF</color>
     <color name="taskbar_shadow">#626A69</color>
 </resources>

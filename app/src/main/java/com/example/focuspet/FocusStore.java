@@ -164,7 +164,12 @@ public final class FocusStore {
     HatchRequest beginHatch(String requestId) {
         synchronized (CALENDAR_LOCK) {
             HatchRequest pending = pendingHatch();
-            if (pending != null) return pending;
+            if (pending != null) {
+                if (!pending.id.equals(requestId)) {
+                    throw new IllegalStateException("A different hatch request is already pending");
+                }
+                return pending;
+            }
             if (!canHatch()) return null;
             long now = System.currentTimeMillis();
             if (!preferences.edit().putInt("pet_eggs", petEggs() - 1)
@@ -192,17 +197,39 @@ public final class FocusStore {
         return Collections.unmodifiableSet(new HashSet<>(preferences.getStringSet("owned_cosmetics", Collections.emptySet())));
     }
 
+    public Set<String> ownedPetLookKeys() {
+        return Collections.unmodifiableSet(new HashSet<>(
+                preferences.getStringSet("owned_pet_looks", Collections.emptySet())));
+    }
+
+    public boolean isPetLookUnlocked(String lookKey) {
+        PetLook look = PetLook.fromKey(lookKey);
+        return look != null && (look == PetLook.ORIGINAL || look.isFree()
+                || ownedPetLookKeys().contains(lookKey));
+    }
+
     /** Balance deduction, permanent unlock/egg grant and receipt use one atomic preference edit. */
     public PurchaseResult purchase(String productId, String requestId) {
+        ShopProduct product = ShopCatalog.product(productId);
+        if (product == null) product = PetLookCatalog.product(productId);
+        return purchase(product, requestId);
+    }
+
+    PurchaseResult purchase(ShopProduct product, String requestId) {
         synchronized (CALENDAR_LOCK) {
-            ShopProduct product = ShopCatalog.product(productId);
             if (product == null || !product.available) return PurchaseResult.INVALID_PRODUCT;
             if (requestId == null || requestId.trim().isEmpty()) return PurchaseResult.INVALID_REQUEST;
             String receipt = preferences.getString("purchase_" + requestId, null);
-            if (receipt != null) return receipt.startsWith(productId + "|")
+            if (receipt != null) return receipt.startsWith(product.id + "|")
                     ? PurchaseResult.PURCHASED : PurchaseResult.INVALID_REQUEST;
             Set<String> owned = new HashSet<>(ownedCosmeticIds());
-            if (product.productType == ProductType.COSMETIC && owned.contains(product.itemKey)) return PurchaseResult.ALREADY_OWNED;
+            Set<String> ownedLooks = new HashSet<>(ownedPetLookKeys());
+            if (product.productType == ProductType.COSMETIC && owned.contains(product.itemKey)) {
+                return PurchaseResult.ALREADY_OWNED;
+            }
+            if (product.productType == ProductType.PET_LOOK && ownedLooks.contains(product.itemKey)) {
+                return PurchaseResult.ALREADY_OWNED;
+            }
             int balance = product.currency == Currency.COINS ? coins() : lifeEssence();
             if (balance < product.price) return PurchaseResult.INSUFFICIENT_RESOURCES;
             if (product.productType == ProductType.PET_EGG
@@ -212,6 +239,9 @@ public final class FocusStore {
             if (product.productType == ProductType.COSMETIC) {
                 owned.add(product.itemKey);
                 editor.putStringSet("owned_cosmetics", owned);
+            } else if (product.productType == ProductType.PET_LOOK) {
+                ownedLooks.add(product.itemKey);
+                editor.putStringSet("owned_pet_looks", ownedLooks);
             } else editor.putInt("pet_eggs", petEggs() + product.quantityGranted);
             editor.putString("purchase_" + requestId, product.id + "|" + product.currency + "|" + product.price
                     + "|" + product.quantityGranted + "|" + System.currentTimeMillis());

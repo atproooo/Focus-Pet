@@ -10,7 +10,7 @@ public final class FocusPetModels {
     private FocusPetModels() { }
 
     public enum Currency { COINS, ESSENCE }
-    public enum ProductType { COSMETIC, PET_EGG }
+    public enum ProductType { COSMETIC, PET_EGG, PET_LOOK }
 
     private static String required(String value, String field) {
         if (value == null || value.trim().isEmpty()) {
@@ -32,9 +32,10 @@ public final class FocusPetModels {
     private static void checkProductCurrency(ProductType type, Currency currency) {
         Objects.requireNonNull(type, "productType");
         Objects.requireNonNull(currency, "currency");
-        if ((type == ProductType.COSMETIC && currency != Currency.COINS)
+        if (((type == ProductType.COSMETIC || type == ProductType.PET_LOOK)
+                && currency != Currency.COINS)
                 || (type == ProductType.PET_EGG && currency != Currency.ESSENCE)) {
-            throw new IllegalArgumentException("Cosmetics use coins and pet eggs use essence");
+            throw new IllegalArgumentException("Cosmetics and pet looks use coins; pet eggs use essence");
         }
     }
 
@@ -168,19 +169,24 @@ public final class FocusPetModels {
     public static final class ShopProduct {
         public final String id;
         public final String name;
+        public final String categoryKey;
         public final ProductType productType;
         public final String itemKey;
+        public final String description;
         public final Currency currency;
         public final long price;
         public final int quantityGranted;
         public final boolean available;
-        public ShopProduct(String id, String name, ProductType productType, String itemKey,
-                           Currency currency, long price, int quantityGranted, boolean available) {
+        public ShopProduct(String id, String name, String categoryKey, ProductType productType,
+                           String itemKey, String description, Currency currency, long price,
+                           int quantityGranted, boolean available) {
             checkProductCurrency(productType, currency);
             this.id = required(id, "id");
             this.name = required(name, "name");
+            this.categoryKey = required(categoryKey, "categoryKey");
             this.productType = productType;
             this.itemKey = required(itemKey, "itemKey");
+            this.description = description == null ? "" : description;
             this.currency = currency;
             this.price = nonNegative(price, "price");
             this.quantityGranted = positive(quantityGranted, "quantityGranted");

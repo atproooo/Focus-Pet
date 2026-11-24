@@ -3,18 +3,42 @@
     android:id="@+id/pet_animation_container"
     android:layout_width="match_parent"
     android:layout_height="200dp"
-    android:layout_marginTop="16dp">
-    <ImageView
-        android:id="@+id/pet_animation_image"
+    android:layout_marginTop="16dp"
+    android:clipChildren="false"
+    android:clipToPadding="false">
+    <FrameLayout
+        android:id="@+id/pet_artwork_layer"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:importantForAccessibility="no"
-        android:scaleType="fitCenter"
-        android:visibility="gone" />
+        android:layout_height="match_parent">
+        <ImageView
+            android:id="@+id/pet_animation_image"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:importantForAccessibility="no"
+            android:scaleType="fitCenter"
+            android:visibility="gone" />
+        <TextView
+            android:id="@+id/pet_animation_placeholder"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:textColor="@color/text_secondary" />
+    </FrameLayout>
     <TextView
-        android:id="@+id/pet_animation_placeholder"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
+        android:id="@+id/pet_expression_overlay"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|end"
+        android:layout_marginTop="8dp"
+        android:layout_marginEnd="8dp"
+        android:background="@drawable/bg_focuspet_lavender"
         android:gravity="center"
-        android:textColor="@color/text_secondary" />
+        android:importantForAccessibility="no"
+        android:minHeight="40dp"
+        android:paddingStart="10dp"
+        android:paddingEnd="10dp"
+        android:textColor="@color/text_primary"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        android:visibility="gone" />
 </FrameLayout>

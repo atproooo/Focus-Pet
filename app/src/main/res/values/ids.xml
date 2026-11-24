@@ -3,9 +3,11 @@
     <item type="id" name="open_shop" />
     <item type="id" name="open_wardrobe" />
     <item type="id" name="shop_balance" />
+    <item type="id" name="shop_balance_icon" />
     <item type="id" name="pet_interaction_feedback" />
     <item type="id" name="pet_interaction_pet" />
     <item type="id" name="pet_interaction_play" />
     <item type="id" name="pet_interaction_rest" />
-    <item type="id" name="hatch_result_select" />
+    <item type="id" name="pet_eggs_chip" />
+    <item type="id" name="hatching_back" />
 </resources>

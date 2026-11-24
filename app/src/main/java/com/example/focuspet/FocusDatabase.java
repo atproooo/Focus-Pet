@@ -9,10 +9,13 @@ import androidx.room.migration.Migration;
 import androidx.sqlite.db.SupportSQLiteDatabase;
 import androidx.annotation.NonNull;
 
-@Database(entities = {FocusSession.class, Pet.class}, version = 5, exportSchema = false)
+@Database(entities = {FocusSession.class, Pet.class, HatchDraft.class, ShopProductEntity.class},
+        version = 7, exportSchema = false)
 public abstract class FocusDatabase extends RoomDatabase {
     public abstract FocusSessionDao focusSessionDao();
     public abstract PetDao petDao();
+    public abstract HatchDraftDao hatchDraftDao();
+    public abstract ShopProductDao shopProductDao();
 
     private static volatile FocusDatabase instance;
     static final Migration MIGRATION_4_5 = new Migration(4, 5) {
@@ -22,6 +25,34 @@ public abstract class FocusDatabase extends RoomDatabase {
             db.execSQL("CREATE UNIQUE INDEX index_pets_hatchRequestId ON pets (hatchRequestId)");
         }
     };
+    static final Migration MIGRATION_5_6 = new Migration(5, 6) {
+        @Override public void migrate(@NonNull SupportSQLiteDatabase db) {
+            db.execSQL("CREATE TABLE IF NOT EXISTS hatch_drafts ("
+                    + "id TEXT NOT NULL, "
+                    + "name TEXT, "
+                    + "appearanceKey TEXT NOT NULL DEFAULT 'classic_cat', "
+                    + "step INTEGER NOT NULL DEFAULT 0, "
+                    + "createdAt INTEGER NOT NULL DEFAULT 0, "
+                    + "PRIMARY KEY(id))");
+        }
+    };
+    static final Migration MIGRATION_6_7 = new Migration(6, 7) {
+        @Override public void migrate(@NonNull SupportSQLiteDatabase db) {
+            db.execSQL("CREATE TABLE IF NOT EXISTS shop_products ("
+                    + "id TEXT NOT NULL, "
+                    + "name TEXT NOT NULL, "
+                    + "categoryKey TEXT NOT NULL, "
+                    + "productType TEXT NOT NULL, "
+                    + "itemKey TEXT NOT NULL, "
+                    + "description TEXT NOT NULL, "
+                    + "currency TEXT NOT NULL, "
+                    + "price INTEGER NOT NULL, "
+                    + "quantityGranted INTEGER NOT NULL, "
+                    + "available INTEGER NOT NULL, "
+                    + "displayOrder INTEGER NOT NULL, "
+                    + "PRIMARY KEY(id))");
+        }
+    };
 
     public static FocusDatabase getInstance(Context context) {
         if (instance == null) {
@@ -29,8 +60,7 @@ public abstract class FocusDatabase extends RoomDatabase {
                 if (instance == null) {
                     instance = Room.databaseBuilder(context.getApplicationContext(),
                             FocusDatabase.class, "focuspet.db")
-                            .addMigrations(MIGRATION_4_5)
-                            .fallbackToDestructiveMigration()
+                            .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
                             .build();
                 }
             }

@@ -23,9 +23,13 @@ public class PetMigrationTest {
             old.execSQL("INSERT INTO pets VALUES (7,'starter','Legacy','Fox','Common',80,'fox','default','Saved pet',1,70,60,1)");
             old.execSQL("INSERT INTO focus_sessions VALUES (9,1,2,25,25,'Legacy session','CLAIMED',1,0,25,25,2,0)");
             old.setVersion(4);old.close();
-            migrated=Room.databaseBuilder(c,FocusDatabase.class,name).addMigrations(FocusDatabase.MIGRATION_4_5).build();
+            migrated=Room.databaseBuilder(c,FocusDatabase.class,name)
+                    .addMigrations(FocusDatabase.MIGRATION_4_5, FocusDatabase.MIGRATION_5_6,
+                            FocusDatabase.MIGRATION_6_7).build();
             Pet pet=migrated.petDao().byId(7);assertNotNull(pet);assertEquals("Legacy",pet.name);assertEquals(80,pet.experience);assertEquals(70,pet.mood);assertTrue(pet.selected);assertNull(pet.hatchRequestId);assertEquals(0,pet.lastInteractionAt);
             assertEquals("Legacy session",migrated.focusSessionDao().findById(9).label);
+            assertNull(migrated.hatchDraftDao().active());
+            assertTrue(migrated.shopProductDao().availableProducts().isEmpty());
             migrated.petDao().updateInteraction(7,75,55,100);assertEquals(100,migrated.petDao().byId(7).lastInteractionAt);
         } finally {if(migrated!=null)migrated.close();c.deleteDatabase(name);}
     }

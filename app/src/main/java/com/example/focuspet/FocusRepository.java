@@ -3,6 +3,7 @@ package com.example.focuspet;
 import android.content.Context;
 
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -11,16 +12,20 @@ import java.util.concurrent.Future;
  * Owns session history and completion rewards using a serialized database executor.
  */
 public final class FocusRepository {
+    private static final String STARTER_TEMPLATE_ID = "starter_fox";
+    private static final String HATCH_TEMPLATE_ID = "hatched_pet";
     private final FocusSessionDao sessions;
     private final PetDao pets;
+    private final HatchDraftDao hatchDrafts;
     private final FocusStore progress;
     private final FocusDatabase database;
     private final ExecutorService databaseExecutor = Executors.newSingleThreadExecutor();
 
     public FocusRepository(Context context) {
         database = FocusDatabase.getInstance(context);
-        sessions = FocusDatabase.getInstance(context).focusSessionDao();
-        pets = FocusDatabase.getInstance(context).petDao();
+        sessions = database.focusSessionDao();
+        pets = database.petDao();
+        hatchDrafts = database.hatchDraftDao();
         progress = new FocusStore(context);
         if (progress.needsCalendarInitialization()) {
             run(() -> {
@@ -28,8 +33,6 @@ public final class FocusRepository {
                 return null;
             });
         }
-        FocusStore.HatchRequest pendingHatch = progress.pendingHatch();
-        if (pendingHatch != null) hatchPet(pendingHatch.id);
     }
 
     /** Erases all persisted sessions, pets, and preferences in one serialized operation. */
@@ -38,6 +41,7 @@ public final class FocusRepository {
             synchronized (FocusStore.CALENDAR_LOCK) {
                 sessions.deleteAll();
                 pets.deleteAll();
+                hatchDrafts.deleteAll();
                 progress.reset();
             }
             return null;
@@ -163,71 +167,251 @@ public final class FocusRepository {
     public Pet pet(long id) { return run(() -> pets.byId(id)); }
 
     boolean savePetLook(long petId, PetLook look) {
+        if (look == null || !progress.isPetLookUnlocked(look.key)) return false;
         return run(() -> pets.updateAppearance(petId, look.key) == 1);
     }
 
     public Pet ensureStarterPet() {
         return run(() -> {
             Pet selected = pets.selected();
+            Pet starter = pets.byTemplateId(STARTER_TEMPLATE_ID);
+            if (starter != null) {
+                pets.updateNameIfMatches(starter.id, "Mochi", "Toast");
+                pets.updateAppearanceIfMatches(starter.id, "default_fox",
+                        PetLook.CLASSIC.key, PetLook.CLASSIC.key);
+                starter = pets.byId(starter.id);
+                if (selected != null && selected.id == starter.id) selected = starter;
+            }
             if (pets.count() > 0) return selected != null ? selected : pets.all().get(0);
-            Pet starter = new Pet();
-            starter.templateId = "starter_fox";
-            starter.name = "Mochi";
-            starter.species = "Fox";
-            starter.rarity = "Common";
-            starter.imageKey = "pet_fox";
-            starter.appearanceData = "default_fox";
-            starter.description = "Why does it look like a mochi?";
-            starter.hatchedAt = System.currentTimeMillis();
-            starter.mood = 100;
-            starter.energy = 100;
-            starter.selected = true;
-            starter.id = pets.insert(starter);
-            return starter;
+            return insertPet(STARTER_TEMPLATE_ID, "Toast", "Fox", PetLook.CLASSIC.key,
+                    PetLook.CLASSIC.key, "Smelling nice?", System.currentTimeMillis(),
+                    null, true);
         });
     }
 
-    public Pet hatchDefaultPet() {
-        return run(() -> insertHatchedPet(null));
-    }
-
-    private Pet insertHatchedPet(FocusStore.HatchRequest request) {
+    private Pet insertPet(String templateId, String name, String species, String imageKey,
+                          String appearanceData, String description, long createdAt,
+                          String hatchRequestId, boolean selected) {
         Pet pet = new Pet();
-        pet.templateId = "default_hatched";
-        pet.name = "Freshman";
-        pet.species = "Cat";
+        pet.templateId = templateId;
+        pet.name = name;
+        pet.species = species;
         pet.rarity = "Common";
-        pet.imageKey = "pet_default";
-        pet.appearanceData = "default";
-        pet.description = "A newly hatched pet waiting to grow.";
-        pet.hatchedAt = request == null ? System.currentTimeMillis() : request.createdAt;
-        pet.hatchRequestId = request == null ? null : request.id;
+        pet.experience = 0;
+        pet.imageKey = imageKey;
+        pet.appearanceData = appearanceData;
+        pet.description = description;
+        pet.hatchedAt = createdAt;
+        pet.hatchRequestId = hatchRequestId;
         pet.mood = 100;
         pet.energy = 100;
-        pet.selected = false;
+        pet.selected = selected;
         pet.id = pets.insert(pet);
         return pet;
     }
 
-    /** A persisted request and a unique pet key recover interruptions without a second charge. */
-    public Pet hatchPet(String requestId) {
-        if (requestId == null || requestId.trim().isEmpty()) throw new IllegalArgumentException("Missing hatch request");
+    public HatchDraft activeHatchDraft() {
+        return run(() -> {
+            hatchDrafts.deleteCompleted();
+            return hatchDrafts.active();
+        });
+    }
+
+    public HatchDraft startHatchDraft() {
         return run(() -> {
             synchronized (FocusStore.CALENDAR_LOCK) {
-                Pet existing = pets.byHatchRequest(requestId);
-                if (existing != null) {
-                    FocusStore.HatchRequest pending = progress.pendingHatch();
-                    if (pending != null && pending.id.equals(requestId)) progress.finishHatch(existing.id);
-                    return existing;
+                HatchDraft active = hatchDrafts.active();
+                FocusStore.HatchRequest pending = progress.pendingHatch();
+                if (active != null) {
+                    if (pending != null && !pending.id.equals(active.id)) {
+                        throw new IllegalStateException("A different hatch customization is already active");
+                    }
+                    return active;
                 }
-                FocusStore.HatchRequest request = progress.beginHatch(requestId);
-                if (request == null) return null;
-                Pet pet = pets.byHatchRequest(request.id);
-                if (pet == null) pet = insertHatchedPet(request);
-                progress.finishHatch(pet.id);
-                return pet;
+                if (pending != null) {
+                    HatchDraft interrupted = hatchDrafts.byId(pending.id);
+                    if (interrupted != null) return interrupted;
+                    HatchDraft legacy = newHatchDraft(pending.id, pending.createdAt);
+                    hatchDrafts.insert(legacy);
+                    return legacy;
+                }
+
+                if (!progress.canHatch()) return null;
+                HatchDraft draft = newHatchDraft(UUID.randomUUID().toString(),
+                        System.currentTimeMillis());
+                hatchDrafts.insert(draft);
+                return draft;
             }
         });
+    }
+
+    private HatchDraft newHatchDraft(String id, long createdAt) {
+        HatchDraft draft = new HatchDraft();
+        draft.id = id;
+        draft.appearanceKey = PetLook.CLASSIC.key;
+        draft.step = HatchDraft.STEP_NAME;
+        draft.createdAt = createdAt;
+        return draft;
+    }
+
+    public boolean updateHatchDraftName(String draftId, String name) {
+        return run(() -> hatchDrafts.updateName(draftId, name == null ? "" : name) == 1);
+    }
+
+    public HatchDraft advanceHatchName(String draftId, String name) {
+        String normalized = name == null ? "" : name.trim();
+        validateHatchName(normalized);
+        return run(() -> {
+            if (hatchDrafts.saveNameAndAdvance(draftId, normalized) != 1) {
+                throw new IllegalStateException("Hatch name step is no longer active");
+            }
+            return hatchDrafts.byId(draftId);
+        });
+    }
+
+    public HatchDraft updateHatchAppearance(String draftId, String appearanceKey) {
+        if (!isSelectableHatchLook(appearanceKey)) {
+            throw new IllegalArgumentException("Unsupported pet appearance");
+        }
+        return run(() -> {
+            if (hatchDrafts.updateAppearance(draftId, appearanceKey) != 1) {
+                throw new IllegalStateException("Hatch appearance step is no longer active");
+            }
+            return hatchDrafts.byId(draftId);
+        });
+    }
+
+    public HatchDraft advanceHatchAppearance(String draftId) {
+        return run(() -> {
+            HatchDraft draft = hatchDrafts.byId(draftId);
+            if (draft == null || draft.step != HatchDraft.STEP_APPEARANCE
+                    || !isSelectableHatchLook(draft.appearanceKey)
+                    || hatchDrafts.advanceToPreview(draftId) != 1) {
+                throw new IllegalStateException("Choose a pet appearance before continuing");
+            }
+            return hatchDrafts.byId(draftId);
+        });
+    }
+
+    public HatchDraft moveHatchDraftBack(String draftId) {
+        return run(() -> {
+            HatchDraft draft = hatchDrafts.byId(draftId);
+            if (draft == null) throw new IllegalStateException("Hatch customization is unavailable");
+            if (draft.step == HatchDraft.STEP_APPEARANCE) {
+                hatchDrafts.backToName(draftId);
+            } else if (draft.step == HatchDraft.STEP_PREVIEW) {
+                hatchDrafts.backToAppearance(draftId);
+            }
+            return hatchDrafts.byId(draftId);
+        });
+    }
+
+    public Pet confirmHatch(String draftId) {
+        if (draftId == null || draftId.trim().isEmpty()) {
+            throw new IllegalArgumentException("Missing hatch draft");
+        }
+        return run(() -> {
+            synchronized (FocusStore.CALENDAR_LOCK) {
+                Pet existing = pets.byHatchRequest(draftId);
+                if (existing != null) {
+                    FocusStore.HatchRequest pending = progress.pendingHatch();
+                    if (pending != null && pending.id.equals(draftId)) {
+                        progress.finishHatch(existing.id);
+                    }
+                    hatchDrafts.deleteById(draftId);
+                    return existing;
+                }
+                HatchDraft draft = hatchDrafts.byId(draftId);
+                if (draft == null || draft.step != HatchDraft.STEP_PREVIEW) {
+                    throw new IllegalStateException("Review the pet before confirming");
+                }
+                validateHatchName(draft.name);
+                if (!isSelectableHatchLook(draft.appearanceKey)) {
+                    throw new IllegalStateException("Choose a valid pet appearance");
+                }
+
+                FocusStore.HatchRequest pending = progress.pendingHatch();
+                if (pending == null) {
+                    pending = progress.beginHatch(draftId);
+                    if (pending == null) return null;
+                } else if (!pending.id.equals(draftId)) {
+                    throw new IllegalStateException("A different hatch request is already pending");
+                }
+                return finishPendingHatch(draft, pending);
+            }
+        });
+    }
+
+    /** Resume only requests that had passed the user's final confirmation step. */
+    public Pet recoverPendingHatch() {
+        return run(() -> {
+            synchronized (FocusStore.CALENDAR_LOCK) {
+                FocusStore.HatchRequest pending = progress.pendingHatch();
+                if (pending == null) return null;
+
+                Pet existing = pets.byHatchRequest(pending.id);
+                if (existing != null) {
+                    progress.finishHatch(existing.id);
+                    hatchDrafts.deleteById(pending.id);
+                    return existing;
+                }
+
+                HatchDraft draft = hatchDrafts.byId(pending.id);
+                if (draft == null) {
+                    draft = newHatchDraft(pending.id, pending.createdAt);
+                    hatchDrafts.insert(draft);
+                    return null;
+                }
+                if (draft.step != HatchDraft.STEP_PREVIEW) return null;
+                return finishPendingHatch(draft, pending);
+            }
+        });
+    }
+
+    private Pet finishPendingHatch(HatchDraft draft, FocusStore.HatchRequest request) {
+        Pet pet = database.runInTransaction(() -> {
+            Pet existing = pets.byHatchRequest(request.id);
+            if (existing != null) return existing;
+
+            HatchDraft latest = hatchDrafts.byId(draft.id);
+            if (latest == null || latest.step != HatchDraft.STEP_PREVIEW) {
+                throw new IllegalStateException("Confirmed hatch draft is unavailable");
+            }
+            validateHatchName(latest.name);
+            if (!isSelectableHatchLook(latest.appearanceKey)) {
+                throw new IllegalStateException("Confirmed pet appearance is invalid");
+            }
+            Pet created = insertPet(HATCH_TEMPLATE_ID, latest.name, "Pet",
+                    latest.appearanceKey, latest.appearanceKey,
+                    "A newly hatched pet waiting to grow.", request.createdAt,
+                    request.id, false);
+            hatchDrafts.markCompleted(latest.id);
+            return created;
+        });
+        progress.finishHatch(pet.id);
+        return pet;
+    }
+
+    private boolean isSelectableHatchLook(String key) {
+        PetLook look = PetLook.fromKey(key);
+        return look != null && look != PetLook.ORIGINAL && progress.isPetLookUnlocked(key);
+    }
+
+    private static void validateHatchName(String name) {
+        if (name == null || name.trim().isEmpty()) {
+            throw new IllegalArgumentException("Enter a name for your pet");
+        }
+        String normalized = name.trim();
+        if (normalized.codePointCount(0, normalized.length()) > HatchDraft.MAX_NAME_CODE_POINTS) {
+            throw new IllegalArgumentException("Pet names must be 20 characters or fewer");
+        }
+        for (int offset = 0; offset < normalized.length();) {
+            int codePoint = normalized.codePointAt(offset);
+            if (Character.isISOControl(codePoint)) {
+                throw new IllegalArgumentException("Pet names cannot contain control characters");
+            }
+            offset += Character.charCount(codePoint);
+        }
     }
 
     public boolean equipCosmetic(long petId, String itemId) {

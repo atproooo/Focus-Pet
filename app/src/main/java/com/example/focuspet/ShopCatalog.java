@@ -17,9 +17,12 @@ public final class ShopCatalog {
             new CosmeticItem("decoration", "Simple decoration", "decoration", "decoration", "A reusable pet decoration.", null, true)));
     public static final List<ShopProduct> PRODUCTS = Collections.unmodifiableList(Arrays.asList(
             // Pet Eggs are earned through focus drops only; they are not sold in the shop.
-            new ShopProduct("collar", "Simple collar", ProductType.COSMETIC, "collar", Currency.COINS, 25, 1, true),
-            new ShopProduct("shirt", "Simple shirt", ProductType.COSMETIC, "shirt", Currency.COINS, 50, 1, true),
-            new ShopProduct("decoration", "Simple decoration", ProductType.COSMETIC, "decoration", Currency.COINS, 75, 1, true)));
+            new ShopProduct("collar", "Simple collar", "accessories", ProductType.COSMETIC,
+                    "collar", "A reusable accessory for your pet.", Currency.COINS, 25, 1, true),
+            new ShopProduct("shirt", "Simple shirt", "clothing", ProductType.COSMETIC,
+                    "shirt", "A reusable outfit for your pet.", Currency.COINS, 50, 1, true),
+            new ShopProduct("decoration", "Simple decoration", "decorations", ProductType.COSMETIC,
+                    "decoration", "A reusable decoration for your pet.", Currency.COINS, 75, 1, true)));
 
     public static ShopProduct product(String id) {
         for (ShopProduct product : PRODUCTS) if (product.id.equals(id)) return product;

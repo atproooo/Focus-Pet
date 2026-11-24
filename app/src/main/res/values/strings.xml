@@ -4,10 +4,23 @@
     <string name="pet_look_classic">Classic cat</string>
     <string name="pet_look_headphones">Headphones cat</string>
     <string name="pet_look_winter">Winter cat</string>
+    <string name="pet_look_mint_star">Mint Star</string>
+    <string name="pet_look_cloud_wings">Cloud Wings</string>
+    <string name="pet_look_midnight_dj">Midnight DJ</string>
+    <string name="pet_look_garden_chill">Garden Chill</string>
+    <string name="pet_look_juice_break">Juice Break</string>
+    <string name="pet_look_blush_winter">Blush Winter</string>
+    <string name="pet_look_strawberry_night">Strawberry Night</string>
+    <string name="shop_unrevealed_pet_look">Unrevealed pet appearance</string>
     <string name="pet_look_choose">Choose appearance</string>
     <string name="pet_look_save">Save appearance</string>
     <string name="pet_look_save_error">Could not save the appearance.</string>
     <string name="pet_look_description">%1$s, %2$s</string>
     <string name="pet_look_placeholder">%1$s\nOriginal look</string>
     <string name="pet_look_generic_name">Your pet</string>
+    <string name="pet_expression_content_description">%1$s. %2$s</string>
+    <string name="pet_expression_happy">happy expression</string>
+    <string name="pet_expression_excited">excited expression</string>
+    <string name="pet_expression_sleepy">sleepy expression</string>
+    <string name="pet_expression_tired">tired expression</string>
 </resources>
