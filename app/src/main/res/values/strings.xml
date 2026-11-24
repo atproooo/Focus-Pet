@@ -23,4 +23,13 @@
     <string name="pet_expression_excited">excited expression</string>
     <string name="pet_expression_sleepy">sleepy expression</string>
     <string name="pet_expression_tired">tired expression</string>
+    <string name="session_celebration_yay">Yay!</string>
+    <string name="session_reward_title">Your session rewards</string>
+    <string name="session_reward_xp">+%1$d XP</string>
+    <string name="session_reward_coins">+%1$d coins</string>
+    <string name="session_reward_essence">+%1$d Life Essence</string>
+    <string name="session_reward_egg">Pet Egg found!</string>
+    <string name="session_reward_no_egg">No Pet Egg this time</string>
+    <string name="hatch_animation_content_description">Pet Egg hatching animation</string>
+    <string name="hatch_animation_load_error">Could not load the Pet Egg animation.</string>
 </resources>

@@ -4,17 +4,14 @@
     android:layout_height="wrap_content"
     android:orientation="vertical">
 
-    <TextView
+    <ImageView
         android:id="@+id/hatching_egg_art"
         android:layout_width="match_parent"
         android:layout_height="240dp"
         android:background="@drawable/bg_focuspet_image_placeholder"
-        android:contentDescription="Reserved large Pet Egg artwork and animation space"
-        android:gravity="center"
-        android:text="PET EGG&#10;ARTWORK / ANIMATION"
-        android:textColor="@color/text_secondary"
-        android:textSize="24sp"
-        android:textStyle="bold" />
+        android:clipToOutline="true"
+        android:contentDescription="@string/hatch_animation_content_description"
+        android:scaleType="fitCenter" />
 
     <TextView
         android:id="@+id/hatching_title"

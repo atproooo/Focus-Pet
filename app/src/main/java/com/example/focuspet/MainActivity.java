@@ -7,10 +7,12 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
+import android.graphics.ImageDecoder;
 import android.graphics.RenderEffect;
 import android.graphics.Shader;
 import android.graphics.Typeface;
 
+import android.graphics.drawable.AnimatedImageDrawable;
 import android.graphics.drawable.StateListDrawable;
 import android.os.Build;
 import android.os.Bundle;
@@ -49,6 +51,7 @@ import java.util.Locale;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.io.IOException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.time.LocalDate;
@@ -82,6 +85,7 @@ public class MainActivity extends AppCompatActivity {
     private EditText hatchNameInput;
     private boolean hatchRecoveryRequired;
     private boolean hatchCommitPending;
+    private AnimatedImageDrawable hatchAnimation;
     private final Handler calendarHandler = new Handler(Looper.getMainLooper());
     private final Runnable calendarRefresh = new Runnable() {
         @Override public void run() {
@@ -93,6 +97,8 @@ public class MainActivity extends AppCompatActivity {
     private final List<ImageView> navigationIcons = new ArrayList<>();
     private final PetArtworkRenderer petArtworkRenderer = new PetArtworkRenderer();
     private final List<PetAnimationController> petAnimationControllers = new ArrayList<>();
+    private SessionCelebrationAnimator sessionCelebrationAnimator;
+    private RewardBurstAnimator rewardBurstAnimator;
     private boolean petAnimationsResumed;
 
     @Override protected void onCreate(Bundle state) {
@@ -442,6 +448,8 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void reset(String screenTitle) {
+        stopHatchAnimation();
+        cancelRewardAnimations();
         currentScreen = screenTitle;
         renderedDay = LocalDate.now();
         title.setText(screenTitle);
@@ -746,14 +754,23 @@ public class MainActivity extends AppCompatActivity {
         reset("Session complete!");
         setSessionLock(true);
         setActiveTab(0);
-        content.addView(imagePlaceholder("SESSION CELEBRATION"));
+        View celebration = LayoutInflater.from(this)
+                .inflate(R.layout.view_session_celebration, content, false);
+        bindPetAnimation(celebration.findViewById(R.id.session_celebration_pet_host),
+                repository.selectedPet());
+        content.addView(celebration);
+        sessionCelebrationAnimator = new SessionCelebrationAnimator(
+                celebration.findViewById(R.id.session_celebration_pet_layer),
+                celebration.findViewById(R.id.session_celebration_popup));
+        sessionCelebrationAnimator.start();
         TextView finishName = text(displayLabel(finished == null ? "" : finished.label),
                 22, purpleDark);
         finishName.setTextAppearance(R.style.TextAppearance_FocusPet_Title);
         finishName.setGravity(Gravity.CENTER);
         finishName.setPadding(0, dp(8), 0, dp(8));
         content.addView(finishName);
-        content.addView(text("★ Great work, your pet is proud.", 24, ContextCompat.getColor(this, R.color.text_primary)));
+        content.addView(text("Great work! Your pet is proud.", 24,
+                ContextCompat.getColor(this, R.color.text_primary)));
         content.addView(text(minutes + " minutes focused\n"
                 + (endedEarly ? "Partial rewards are ready to claim." : "Your rewards are ready to claim."),
                 20, ContextCompat.getColor(this, R.color.text_secondary)));
@@ -769,18 +786,34 @@ public class MainActivity extends AppCompatActivity {
         reset("Claim rewards");
         setSessionLock(true);
         setActiveTab(0);
-        content.addView(imagePlaceholder("REWARD ANIMATION"));
+        View rewardBanner = LayoutInflater.from(this)
+                .inflate(R.layout.view_claim_reward_banner, content, false);
+        content.addView(rewardBanner);
+        rewardBurstAnimator = new RewardBurstAnimator(
+                rewardBanner.findViewById(R.id.claim_reward_particle_layer),
+                session.xpReward, session.coinReward, session.essenceReward,
+                session.eggReward, pixelFont);
+        rewardBurstAnimator.start();
         TextView claimName = text(displayLabel(session.label), 22, purpleDark);
         claimName.setTextAppearance(R.style.TextAppearance_FocusPet_Title);
         claimName.setGravity(Gravity.CENTER);
         claimName.setPadding(0, dp(8), 0, dp(8));
         content.addView(claimName);
-        content.addView(text("Your session rewards", 24, ContextCompat.getColor(this, R.color.text_primary)));
-        content.addView(systemText("★ +" + session.xpReward + " XP\n"
-                + "● +" + session.coinReward + " coins\n"
-                + "✦ +" + session.essenceReward + " Life Essence\n"
-                + (session.eggReward ? "Pet Egg found!" : "No Pet Egg this time"),
-                20, ContextCompat.getColor(this, R.color.text_secondary)));
+        content.addView(text(getString(R.string.session_reward_title), 24,
+                ContextCompat.getColor(this, R.color.text_primary)));
+        addRewardSummaryRow(content, 0,
+                getString(R.string.session_reward_xp, session.xpReward));
+        addRewardSummaryRow(content, R.drawable.icon_coin,
+                getString(R.string.session_reward_coins, session.coinReward));
+        addRewardSummaryRow(content, R.drawable.icon_essence,
+                getString(R.string.session_reward_essence, session.essenceReward));
+        if (session.eggReward) {
+            addRewardSummaryRow(content, R.drawable.icon_eggs,
+                    getString(R.string.session_reward_egg));
+        } else {
+            addRewardSummaryRow(content, 0,
+                    getString(R.string.session_reward_no_egg));
+        }
         content.addView(button("Claim rewards", v -> {
             if (repository.claimRewards(sessionId)) {
                 showHome();
@@ -788,15 +821,34 @@ public class MainActivity extends AppCompatActivity {
         }));
     }
 
-    private TextView imagePlaceholder(String label) {
-        TextView placeholder = text("🐾\n" + label, 22, ContextCompat.getColor(this, R.color.text_primary));
-        placeholder.setGravity(Gravity.CENTER);
-        placeholder.setBackground(roundColor(ContextCompat.getColor(this, R.color.background_card), 16));
-        placeholder.setContentDescription("Reserved space for " + label.toLowerCase(Locale.US));
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, dp(140));
-        params.setMargins(dp(8), dp(8), dp(8), dp(8));
-        placeholder.setLayoutParams(params);
-        return placeholder;
+    private void addRewardSummaryRow(LinearLayout parent, int iconResource, String label) {
+        LinearLayout row = new LinearLayout(this);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        if (iconResource != 0) {
+            ImageView icon = new ImageView(this);
+            icon.setImageResource(iconResource);
+            icon.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            icon.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            row.addView(icon, new LinearLayout.LayoutParams(dp(24), dp(24)));
+        }
+        TextView value = text(label, 18,
+                ContextCompat.getColor(this, R.color.text_secondary));
+        value.setPadding(iconResource == 0 ? dp(32) : dp(8), dp(2), 0, dp(2));
+        row.addView(value, new LinearLayout.LayoutParams(-1, -2));
+        LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(-1, -2);
+        rowParams.setMargins(0, dp(1), 0, dp(1));
+        parent.addView(row, rowParams);
+    }
+
+    private void cancelRewardAnimations() {
+        if (sessionCelebrationAnimator != null) {
+            sessionCelebrationAnimator.cancel();
+            sessionCelebrationAnimator = null;
+        }
+        if (rewardBurstAnimator != null) {
+            rewardBurstAnimator.cancel();
+            rewardBurstAnimator = null;
+        }
     }
 
     private void showCollection() {
@@ -918,6 +970,7 @@ public class MainActivity extends AppCompatActivity {
                 .inflate(R.layout.screen_hatching, content, false);
         addHatchBackButton(v -> showCollection(), true);
         content.addView(screen);
+        startHatchAnimation(screen.findViewById(R.id.hatching_egg_art));
 
         int eggs = store.petEggs();
         int essence = store.lifeEssence();
@@ -943,6 +996,27 @@ public class MainActivity extends AppCompatActivity {
                 toast("Unable to start pet customization. Please try again.");
             }
         });
+    }
+
+    private void startHatchAnimation(ImageView imageView) {
+        try {
+            AnimatedImageDrawable animation = (AnimatedImageDrawable) ImageDecoder.decodeDrawable(
+                    ImageDecoder.createSource(getResources(), R.drawable.background_hatch));
+            animation.setRepeatCount(AnimatedImageDrawable.REPEAT_INFINITE);
+            hatchAnimation = animation;
+            imageView.setImageDrawable(animation);
+            if (petAnimationsResumed) animation.start();
+        } catch (IOException error) {
+            android.util.Log.e("FocusPet", "Unable to load the Pet Egg animation", error);
+            toast(getString(R.string.hatch_animation_load_error));
+        }
+    }
+
+    private void stopHatchAnimation() {
+        if (hatchAnimation != null) {
+            hatchAnimation.stop();
+            hatchAnimation = null;
+        }
     }
 
     private void addHatchBackButton(View.OnClickListener listener, boolean enabled) {
@@ -1218,6 +1292,8 @@ public class MainActivity extends AppCompatActivity {
         PetAnimationController controller = new PetAnimationController(
                 host,
                 host.findViewById(R.id.pet_artwork_layer),
+                host.findViewById(R.id.pet_expression_bubble),
+                host.findViewById(R.id.pet_expression_bubble_image),
                 host.findViewById(R.id.pet_expression_overlay),
                 mode);
         if (pet != null) {
@@ -1823,6 +1899,9 @@ public class MainActivity extends AppCompatActivity {
     @Override protected void onResume() {
         super.onResume();
         petAnimationsResumed = true;
+        if (hatchAnimation != null && !hatchAnimation.isRunning()) {
+            hatchAnimation.start();
+        }
         refreshCalendarScreen();
         for (PetAnimationController controller : petAnimationControllers) {
             controller.resume();
@@ -1832,9 +1911,11 @@ public class MainActivity extends AppCompatActivity {
 
     @Override protected void onPause() {
         petAnimationsResumed = false;
+        if (hatchAnimation != null) hatchAnimation.stop();
         for (PetAnimationController controller : petAnimationControllers) {
             controller.pause();
         }
+        cancelRewardAnimations();
         calendarHandler.removeCallbacks(calendarRefresh);
         if (hatchNameInput != null && activeHatchDraft != null
                 && activeHatchDraft.step == HatchDraft.STEP_NAME) {
@@ -1850,7 +1931,9 @@ public class MainActivity extends AppCompatActivity {
 
     @Override protected void onDestroy() {
         calendarHandler.removeCallbacks(calendarRefresh);
+        stopHatchAnimation();
         clearPetAnimationControllers();
+        cancelRewardAnimations();
         if (timerReceiver != null) unregisterReceiver(timerReceiver);
         super.onDestroy();
     }

@@ -8,11 +8,15 @@ import android.animation.ValueAnimator;
 import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.view.View;
 import android.view.animation.AccelerateDecelerateInterpolator;
 import android.view.animation.DecelerateInterpolator;
+import android.widget.ImageView;
 import android.widget.TextView;
 import android.graphics.Typeface;
+
+import java.util.Random;
 
 final class PetAnimationController {
     enum Mode {
@@ -22,19 +26,30 @@ final class PetAnimationController {
 
     private static final long EXPRESSION_DURATION_MS = 1600L;
     private static final long IDLE_DURATION_MS = 2200L;
+    private static final long AMBIENT_BUBBLE_DURATION_MS = 2000L;
+    private static final long AMBIENT_INITIAL_DELAY_MIN_MS = 15_000L;
+    private static final long AMBIENT_INITIAL_DELAY_MAX_MS = 30_000L;
+    private static final long AMBIENT_CHECK_MIN_MS = 30_000L;
+    private static final long AMBIENT_CHECK_MAX_MS = 60_000L;
+    private static final float AMBIENT_BUBBLE_CHANCE = 0.25f;
 
     private final View host;
     private final View artworkLayer;
+    private final View expressionBubble;
+    private final ImageView expressionBubbleImage;
     private final TextView expressionView;
     private final Mode mode;
     private final Context context;
     private final String baseContentDescription;
     private final Handler handler = new Handler(Looper.getMainLooper());
+    private final Random ambientRandom = new Random();
+    private final PetBubblePolicy bubblePolicy = new PetBubblePolicy();
     private final View.OnAttachStateChangeListener attachListener;
 
     private PetExpression restingExpression = PetExpression.NEUTRAL;
     private AnimatorSet idleAnimator;
     private AnimatorSet interactionAnimator;
+    private AnimatorSet bubbleEntranceAnimator;
     private boolean activityResumed;
     private boolean attached;
     private boolean disposed;
@@ -42,12 +57,25 @@ final class PetAnimationController {
 
     private final Runnable restoreExpression = () -> {
         transientExpression = false;
-        applyExpression(restingExpression);
+        hideExpression();
+    };
+    private final Runnable ambientBubbleCheck = () -> {
+        if (!canRunAmbientBubbleSchedule()) return;
+        long now = SystemClock.elapsedRealtime();
+        if (!transientExpression && interactionAnimator == null
+                && bubblePolicy.canShowAmbient(restingExpression, now)
+                && ambientRandom.nextFloat() < AMBIENT_BUBBLE_CHANCE) {
+            showTransientExpression(restingExpression, AMBIENT_BUBBLE_DURATION_MS, true);
+        }
+        scheduleNextAmbientBubbleCheck();
     };
 
-    PetAnimationController(View host, View artworkLayer, TextView expressionView, Mode mode) {
+    PetAnimationController(View host, View artworkLayer, View expressionBubble,
+                           ImageView expressionBubbleImage, TextView expressionView, Mode mode) {
         this.host = host;
         this.artworkLayer = artworkLayer;
+        this.expressionBubble = expressionBubble;
+        this.expressionBubbleImage = expressionBubbleImage;
         this.expressionView = expressionView;
         this.mode = mode;
         this.context = host.getContext();
@@ -55,19 +83,21 @@ final class PetAnimationController {
         this.baseContentDescription = description == null ? "" : description.toString();
         this.attached = host.isAttachedToWindow();
         expressionView.setTypeface(Typeface.MONOSPACE);
-        expressionView.setVisibility(View.GONE);
+        hideExpression();
 
         attachListener = new View.OnAttachStateChangeListener() {
             @Override public void onViewAttachedToWindow(View view) {
                 attached = true;
                 startIdleIfReady();
+                startAmbientBubbleSchedule();
             }
 
             @Override public void onViewDetachedFromWindow(View view) {
                 attached = false;
+                stopAmbientBubbleSchedule();
                 clearTransientExpression();
                 stopMotion();
-                applyExpression(restingExpression);
+                hideExpression();
             }
         };
         host.addOnAttachStateChangeListener(attachListener);
@@ -75,7 +105,8 @@ final class PetAnimationController {
 
     void setRestingExpression(PetExpression expression) {
         restingExpression = expression;
-        if (!transientExpression) applyExpression(expression);
+        if (expression == PetExpression.NEUTRAL) stopAmbientBubbleSchedule();
+        else startAmbientBubbleSchedule();
     }
 
     void resume() {
@@ -83,13 +114,15 @@ final class PetAnimationController {
         activityResumed = true;
         attached = host.isAttachedToWindow();
         startIdleIfReady();
+        startAmbientBubbleSchedule();
     }
 
     void pause() {
         activityResumed = false;
+        stopAmbientBubbleSchedule();
         clearTransientExpression();
         stopMotion();
-        applyExpression(restingExpression);
+        hideExpression();
     }
 
     void dispose() {
@@ -119,15 +152,51 @@ final class PetAnimationController {
     }
 
     void showTransientExpression(PetExpression expression, long durationMs) {
+        showTransientExpression(expression, durationMs, false);
+    }
+
+    private void showTransientExpression(
+            PetExpression expression, long durationMs, boolean ambient) {
         if (disposed) return;
         handler.removeCallbacks(restoreExpression);
-        transientExpression = durationMs > 0;
-        applyExpression(expression);
-        if (transientExpression) {
-            handler.postDelayed(restoreExpression, durationMs);
-        } else {
-            applyExpression(restingExpression);
+        if (durationMs <= 0 || expression == PetExpression.NEUTRAL) {
+            transientExpression = false;
+            hideExpression();
+            return;
         }
+        transientExpression = true;
+        showExpression(expression);
+        long now = SystemClock.elapsedRealtime();
+        if (ambient) bubblePolicy.recordAmbientBubble(now);
+        else bubblePolicy.recordBubble(now);
+        handler.postDelayed(restoreExpression, durationMs);
+    }
+
+    private boolean canRunAmbientBubbleSchedule() {
+        return mode == Mode.INTERACTIVE && restingExpression != PetExpression.NEUTRAL
+                && !disposed && attached && activityResumed
+                && host.isShown() && host.getWindowVisibility() == View.VISIBLE;
+    }
+
+    private void startAmbientBubbleSchedule() {
+        if (!canRunAmbientBubbleSchedule()) return;
+        handler.removeCallbacks(ambientBubbleCheck);
+        handler.postDelayed(ambientBubbleCheck,
+                randomDelay(AMBIENT_INITIAL_DELAY_MIN_MS, AMBIENT_INITIAL_DELAY_MAX_MS));
+    }
+
+    private void scheduleNextAmbientBubbleCheck() {
+        if (!canRunAmbientBubbleSchedule()) return;
+        handler.postDelayed(ambientBubbleCheck,
+                randomDelay(AMBIENT_CHECK_MIN_MS, AMBIENT_CHECK_MAX_MS));
+    }
+
+    private void stopAmbientBubbleSchedule() {
+        handler.removeCallbacks(ambientBubbleCheck);
+    }
+
+    private long randomDelay(long minimum, long maximum) {
+        return minimum + ambientRandom.nextInt((int) (maximum - minimum + 1));
     }
 
     private void startIdleIfReady() {
@@ -189,17 +258,66 @@ final class PetAnimationController {
         return animator;
     }
 
-    private void applyExpression(PetExpression expression) {
-        boolean visible = expression != PetExpression.NEUTRAL;
-        expressionView.setText(expression.asciiArt);
-        expressionView.setVisibility(visible ? View.VISIBLE : View.GONE);
-        if (!visible || baseContentDescription.isEmpty()) {
-            host.setContentDescription(baseContentDescription);
+    private void showExpression(PetExpression expression) {
+        if (expression == PetExpression.NEUTRAL) {
+            hideExpression();
             return;
         }
+        if (expressionBubbleImage.getDrawable() == null) {
+            expressionBubbleImage.setImageResource(R.drawable.bubble_thinking);
+        }
+        expressionView.setText(expression.asciiArt);
+        expressionView.setVisibility(View.VISIBLE);
+        expressionBubble.setVisibility(View.VISIBLE);
+        animateBubbleEntrance();
+        if (baseContentDescription.isEmpty()) return;
         host.setContentDescription(context.getString(
                 R.string.pet_expression_content_description,
                 baseContentDescription, context.getString(expression.descriptionRes)));
+    }
+
+    private void hideExpression() {
+        cancelBubbleEntrance();
+        expressionView.setVisibility(View.GONE);
+        expressionBubble.setVisibility(View.GONE);
+        expressionBubble.setAlpha(1f);
+        expressionBubble.setScaleX(1f);
+        expressionBubble.setScaleY(1f);
+        host.setContentDescription(baseContentDescription);
+    }
+
+    private void animateBubbleEntrance() {
+        cancelBubbleEntrance();
+        expressionBubble.setAlpha(0f);
+        expressionBubble.setScaleX(0.9f);
+        expressionBubble.setScaleY(0.9f);
+        if (!ValueAnimator.areAnimatorsEnabled()) {
+            expressionBubble.setAlpha(1f);
+            expressionBubble.setScaleX(1f);
+            expressionBubble.setScaleY(1f);
+            return;
+        }
+
+        AnimatorSet animator = new AnimatorSet();
+        animator.playTogether(
+                ObjectAnimator.ofFloat(expressionBubble, View.ALPHA, 0f, 1f),
+                ObjectAnimator.ofFloat(expressionBubble, View.SCALE_X, 0.9f, 1f),
+                ObjectAnimator.ofFloat(expressionBubble, View.SCALE_Y, 0.9f, 1f));
+        animator.setDuration(220L);
+        animator.setInterpolator(new DecelerateInterpolator());
+        bubbleEntranceAnimator = animator;
+        animator.addListener(new AnimatorListenerAdapter() {
+            @Override public void onAnimationEnd(Animator animation) {
+                if (bubbleEntranceAnimator == animator) bubbleEntranceAnimator = null;
+            }
+        });
+        animator.start();
+    }
+
+    private void cancelBubbleEntrance() {
+        AnimatorSet previous = bubbleEntranceAnimator;
+        bubbleEntranceAnimator = null;
+        if (previous != null) previous.cancel();
     }
 
     private void clearTransientExpression() {

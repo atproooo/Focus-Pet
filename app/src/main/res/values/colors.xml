@@ -20,7 +20,7 @@
     <color name="progress_track">#7D8374</color>
 
     <color name="desktop_background">#FFFDF0</color>
-    <color name="window_title">#364089</color>
+    <color name="window_title">#2E529B</color>
     <color name="window_title_highlight">@color/window_title</color>
     <color name="window_title_text">#FFFDF0</color>
     <color name="window_border">#273746</color>

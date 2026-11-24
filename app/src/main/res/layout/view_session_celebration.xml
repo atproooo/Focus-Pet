@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/session_celebration_scene"
+    android:layout_width="match_parent"
+    android:layout_height="140dp"
+    android:layout_margin="8dp"
+    android:background="@drawable/bg_focuspet_reward_banner"
+    android:clipChildren="false"
+    android:clipToPadding="false">
+
+    <FrameLayout
+        android:id="@+id/session_celebration_pet_layer"
+        android:layout_width="132dp"
+        android:layout_height="132dp"
+        android:layout_gravity="start|center_vertical"
+        android:layout_marginStart="8dp">
+
+        <FrameLayout
+            android:id="@+id/session_celebration_pet_host"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
+
+            <ImageView
+                android:id="@+id/pet_animation_image"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:importantForAccessibility="no"
+                android:scaleType="fitCenter"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/pet_animation_placeholder"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:fontFamily="@font/fusion_pixel_10px_monospaced_latin"
+                android:gravity="center"
+                android:importantForAccessibility="no"
+                android:textColor="@color/text_secondary"
+                android:visibility="gone" />
+        </FrameLayout>
+    </FrameLayout>
+
+    <FrameLayout
+        android:id="@+id/session_celebration_popup"
+        android:layout_width="124dp"
+        android:layout_height="104dp"
+        android:layout_gravity="top|end"
+        android:importantForAccessibility="no"
+        android:visibility="gone">
+
+        <ImageView
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:importantForAccessibility="no"
+            android:scaleType="fitCenter"
+            android:src="@drawable/bubble_thinking" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:paddingBottom="18dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/fusion_pixel_10px_monospaced_latin"
+                android:text="(^o^)"
+                android:textColor="@color/text_primary"
+                android:textSize="13sp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/fusion_pixel_10px_monospaced_latin"
+                android:text="@string/session_celebration_yay"
+                android:textColor="@color/text_primary"
+                android:textSize="15sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+    </FrameLayout>
+</FrameLayout>
