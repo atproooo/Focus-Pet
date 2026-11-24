@@ -16,7 +16,9 @@ The current project is an Android MVP for a single local user. It does not requi
 - Persistent pets with names, species, rarity, level, experience, appearance data, hatch date, mood, energy, and selected companion state.
 - Companion selection from the home screen.
 - Collection screen with owned pets and resource inventory.
-- Shop with All and Pet Looks filters, illustrated pet-look cards, and a purchase confirmation step. Locked looks are blurred; owned looks move to the bottom. Seven additional pet looks cost 67 Coins each and unlock globally for all pets.
+- Shop with All, Pet Looks, and Expressions filters. Expression items stack in inventory and can be taught to individual pets.
+- Pet detail and Customize screens with per-pet learned expressions, enable checkboxes, and random expression bubbles during focus and pet interactions.
+- Hatched pets keep their selected base appearance; owned accessories remain managed separately.
 - Pet detail screen with experience progress.
 - Statistics summary and clickable focus-history details.
 - Settings, notification permission handling, local reset, and debug-only resource controls.
@@ -53,8 +55,9 @@ The original project plan mentioned Jetpack Compose, but the current implementat
 - [`FocusRepository.java`](app/src/main/java/com/example/focuspet/FocusRepository.java) - Coordinates Room sessions and pets, calculates randomized rewards, completes sessions, and atomically claims rewards.
 - [`FocusStore.java`](app/src/main/java/com/example/focuspet/FocusStore.java) - Stores lightweight account progress, resources, streak values, and active-session state in `SharedPreferences`.
 - [`ShopRepository.java`](app/src/main/java/com/example/focuspet/ShopRepository.java), [`ShopProductEntity.java`](app/src/main/java/com/example/focuspet/ShopProductEntity.java), and [`ShopProductDao.java`](app/src/main/java/com/example/focuspet/ShopProductDao.java) - Seeds and reads the Room-backed shop catalog.
-- [`ShopCatalog.java`](app/src/main/java/com/example/focuspet/ShopCatalog.java), [`PetLookCatalog.java`](app/src/main/java/com/example/focuspet/PetLookCatalog.java), and [`ShopCategory.java`](app/src/main/java/com/example/focuspet/ShopCategory.java) - Define products, appearance offers, and shop categories separately from persistence and UI.
+- [`ShopCatalog.java`](app/src/main/java/com/example/focuspet/ShopCatalog.java), [`PetLookCatalog.java`](app/src/main/java/com/example/focuspet/PetLookCatalog.java), [`PetExpressionCatalog.java`](app/src/main/java/com/example/focuspet/PetExpressionCatalog.java), and [`ShopCategory.java`](app/src/main/java/com/example/focuspet/ShopCategory.java) - Define products, appearance offers, expression items, and shop categories separately from persistence and UI.
 - [`PetLook.java`](app/src/main/java/com/example/focuspet/PetLook.java) - Maps pet appearance keys to localized labels and drawable resources.
+- [`PetExpression.java`](app/src/main/java/com/example/focuspet/PetExpression.java) and [`PetExpressionSelector.java`](app/src/main/java/com/example/focuspet/PetExpressionSelector.java) - Define built-in and learnable expressions and choose context-appropriate expressions for bubbles.
 
 ### Room data model
 
@@ -186,3 +189,7 @@ These are data structures and basic field validations only. Room entities and mi
 The app includes a shop with All and Pet Looks filters, product cards, previews, and a confirmation dialog. Seven additional pet appearances are stored in the Room product catalog and can be purchased for 67 Coins each; ownership remains global in `SharedPreferences` and is granted atomically with the balance deduction and purchase receipt. Pet Egg customization requires a name, appearance choice, and final preview confirmation; resources are charged and the pet is added to the collection only at confirmation. The draft can resume after interruption. Insufficient-resource hatch buttons are disabled and gray. The extra four-minute warning was removed, leaving the normal single confirmation.
 
 Purchases are persisted with duplicate-request protection. Hatching uses a resumable Room draft and a request journal to recover interrupted confirmations without charging twice. Room v4-to-v7 migrations preserve existing pets and history. Product and cosmetic types from `data-model` are used by the Android app; the other standalone model types are still prototypes. See [implementation notes and validation](docs/pet-shop-2026-11-18.md) for initial prices, storage behavior and testing scope.
+
+## Pet expression implementation update (2026-11-24)
+
+The shop offers eight A-H expression items for 50 Coins each. Items are repeatable and stack in `SharedPreferences`; teaching one to a pet consumes one item, records that expression for the pet, and enables it by default. Customize lists only that pet's learned expressions with per-expression Use checkboxes, while Expression inventory lists only positive stock and supports teaching directly to the current pet. Expression selection is shared by focus-session and pet-detail bubbles, with the existing ambient rate limits retained. Base appearance remains fixed after hatching; accessory equipment stays on a separate screen. No Room schema change or data reset is required.

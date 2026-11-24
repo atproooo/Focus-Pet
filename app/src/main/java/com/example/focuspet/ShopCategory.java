@@ -4,7 +4,8 @@ import com.example.focuspet.model.FocusPetModels.ProductType;
 
 public enum ShopCategory {
     ALL(null, "All"),
-    PET_LOOKS("pet_looks", "Pet Looks");
+    PET_LOOKS("pet_looks", "Pet Looks"),
+    EXPRESSIONS("expressions", "Expressions");
 
     final String key;
     final String label;
@@ -15,7 +16,11 @@ public enum ShopCategory {
     }
 
     boolean includes(ShopProductEntity product) {
-        if (!ProductType.PET_LOOK.name().equals(product.productType)) return false;
-        return this == ALL || key.equals(product.categoryKey);
+        ProductType type = ProductType.valueOf(product.productType);
+        if (this == ALL) {
+            return type == ProductType.PET_LOOK || type == ProductType.PET_EXPRESSION;
+        }
+        if (this == PET_LOOKS) return type == ProductType.PET_LOOK;
+        return type == ProductType.PET_EXPRESSION && key.equals(product.categoryKey);
     }
 }

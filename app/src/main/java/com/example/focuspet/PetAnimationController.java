@@ -9,6 +9,7 @@ import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
+import android.util.TypedValue;
 import android.view.View;
 import android.view.animation.AccelerateDecelerateInterpolator;
 import android.view.animation.DecelerateInterpolator;
@@ -17,6 +18,8 @@ import android.widget.TextView;
 import android.graphics.Typeface;
 
 import java.util.Random;
+import java.util.Collections;
+import java.util.Set;
 
 final class PetAnimationController {
     enum Mode {
@@ -41,6 +44,7 @@ final class PetAnimationController {
     private final Mode mode;
     private final Context context;
     private final String baseContentDescription;
+    private Set<String> enabledExpressionKeys = Collections.emptySet();
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Random ambientRandom = new Random();
     private final PetBubblePolicy bubblePolicy = new PetBubblePolicy();
@@ -62,16 +66,20 @@ final class PetAnimationController {
     private final Runnable ambientBubbleCheck = () -> {
         if (!canRunAmbientBubbleSchedule()) return;
         long now = SystemClock.elapsedRealtime();
+        PetExpression expression = PetExpressionSelector.choose(
+                restingExpression, enabledExpressionKeys,
+                PetExpression.CONTEXT_AMBIENT, ambientRandom);
         if (!transientExpression && interactionAnimator == null
-                && bubblePolicy.canShowAmbient(restingExpression, now)
+                && bubblePolicy.canShowAmbient(expression, now)
                 && ambientRandom.nextFloat() < AMBIENT_BUBBLE_CHANCE) {
-            showTransientExpression(restingExpression, AMBIENT_BUBBLE_DURATION_MS, true);
+            showTransientExpression(expression, AMBIENT_BUBBLE_DURATION_MS, true);
         }
         scheduleNextAmbientBubbleCheck();
     };
 
     PetAnimationController(View host, View artworkLayer, View expressionBubble,
-                           ImageView expressionBubbleImage, TextView expressionView, Mode mode) {
+                           ImageView expressionBubbleImage, TextView expressionView, Mode mode,
+                           Set<String> enabledExpressionKeys) {
         this.host = host;
         this.artworkLayer = artworkLayer;
         this.expressionBubble = expressionBubble;
@@ -79,10 +87,15 @@ final class PetAnimationController {
         this.expressionView = expressionView;
         this.mode = mode;
         this.context = host.getContext();
+        this.enabledExpressionKeys = enabledExpressionKeys == null
+                ? Collections.emptySet() : enabledExpressionKeys;
         CharSequence description = host.getContentDescription();
         this.baseContentDescription = description == null ? "" : description.toString();
         this.attached = host.isAttachedToWindow();
         expressionView.setTypeface(Typeface.MONOSPACE);
+        expressionView.setMaxLines(2);
+        expressionView.setAutoSizeTextTypeUniformWithConfiguration(
+                6, 16, 1, TypedValue.COMPLEX_UNIT_SP);
         hideExpression();
 
         attachListener = new View.OnAttachStateChangeListener() {
@@ -105,7 +118,9 @@ final class PetAnimationController {
 
     void setRestingExpression(PetExpression expression) {
         restingExpression = expression;
-        if (expression == PetExpression.NEUTRAL) stopAmbientBubbleSchedule();
+        if (expression == PetExpression.NEUTRAL && !hasAmbientExpression()) {
+            stopAmbientBubbleSchedule();
+        }
         else startAmbientBubbleSchedule();
     }
 
@@ -134,7 +149,10 @@ final class PetAnimationController {
 
     void playInteraction(PetInteraction.Action action) {
         if (disposed || mode != Mode.INTERACTIVE) return;
-        showTransientExpression(PetExpression.forAction(action), EXPRESSION_DURATION_MS);
+        PetExpression expression = PetExpressionSelector.choose(
+                PetExpression.forAction(action), enabledExpressionKeys,
+                PetExpression.contextForAction(action), ambientRandom);
+        showTransientExpression(expression, EXPRESSION_DURATION_MS);
         if (!ValueAnimator.areAnimatorsEnabled()) return;
 
         stopMotion();
@@ -173,9 +191,20 @@ final class PetAnimationController {
     }
 
     private boolean canRunAmbientBubbleSchedule() {
-        return mode == Mode.INTERACTIVE && restingExpression != PetExpression.NEUTRAL
+        return (restingExpression != PetExpression.NEUTRAL || hasAmbientExpression())
                 && !disposed && attached && activityResumed
                 && host.isShown() && host.getWindowVisibility() == View.VISIBLE;
+    }
+
+    private boolean hasAmbientExpression() {
+        for (String key : enabledExpressionKeys) {
+            PetExpression expression = PetExpression.fromKey(key);
+            if (expression != null && expression.learnable
+                    && expression.supportsContext(PetExpression.CONTEXT_AMBIENT)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void startAmbientBubbleSchedule() {

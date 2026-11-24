@@ -50,6 +50,7 @@ public final class ShopRepository {
         run(() -> {
             List<ShopProduct> catalog = new ArrayList<>(ShopCatalog.PRODUCTS);
             catalog.addAll(PetLookCatalog.PRODUCTS);
+            catalog.addAll(PetExpressionCatalog.PRODUCTS);
             database.runInTransaction(() -> {
                 for (int i = 0; i < catalog.size(); i++) {
                     products.upsert(ShopProductEntity.from(catalog.get(i), i));

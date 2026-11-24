@@ -25,8 +25,12 @@ public final class FocusStore {
     }
 
     FocusStore(Context context, Clock clock) {
-        preferences = context.getSharedPreferences("focuspet_progress", Context.MODE_PRIVATE);
+        this(context.getSharedPreferences("focuspet_progress", Context.MODE_PRIVATE), clock);
+    }
+
+    FocusStore(SharedPreferences preferences, Clock clock) {
         this.clock = clock;
+        this.preferences = preferences;
     }
 
     public int dailyGoal() { return preferences.getInt("daily_goal", 60); }
@@ -202,16 +206,74 @@ public final class FocusStore {
                 preferences.getStringSet("owned_pet_looks", Collections.emptySet())));
     }
 
+    public int expressionStock(String expressionKey) {
+        PetExpression expression = PetExpression.fromKey(expressionKey);
+        return expression != null && expression.learnable
+                ? preferences.getInt(expressionStockPreference(expressionKey), 0) : 0;
+    }
+
+    public Set<String> learnedPetExpressions(long petId) {
+        return Collections.unmodifiableSet(new HashSet<>(preferences.getStringSet(
+                learnedExpressionsPreference(petId), Collections.emptySet())));
+    }
+
+    public Set<String> enabledPetExpressions(long petId) {
+        Set<String> enabled = new HashSet<>(preferences.getStringSet(
+                enabledExpressionsPreference(petId), Collections.emptySet()));
+        enabled.retainAll(learnedPetExpressions(petId));
+        return Collections.unmodifiableSet(enabled);
+    }
+
+    public boolean setPetExpressionEnabled(long petId, String expressionKey, boolean enabled) {
+        synchronized (CALENDAR_LOCK) {
+            PetExpression expression = PetExpression.fromKey(expressionKey);
+            if (petId <= 0 || expression == null || !expression.learnable) return false;
+            Set<String> learned = new HashSet<>(learnedPetExpressions(petId));
+            if (!learned.contains(expressionKey)) return false;
+            Set<String> active = new HashSet<>(enabledPetExpressions(petId));
+            if (enabled) active.add(expressionKey);
+            else active.remove(expressionKey);
+            return preferences.edit()
+                    .putStringSet(enabledExpressionsPreference(petId), active)
+                    .commit();
+        }
+    }
+
+    public enum ExpressionUseResult { LEARNED, ALREADY_LEARNED, NO_STOCK, INVALID_EXPRESSION, STORAGE_ERROR }
+
+    public ExpressionUseResult teachExpression(long petId, String expressionKey) {
+        synchronized (CALENDAR_LOCK) {
+            PetExpression expression = PetExpression.fromKey(expressionKey);
+            if (petId <= 0 || expression == null || !expression.learnable) {
+                return ExpressionUseResult.INVALID_EXPRESSION;
+            }
+            Set<String> learned = new HashSet<>(learnedPetExpressions(petId));
+            if (learned.contains(expressionKey)) return ExpressionUseResult.ALREADY_LEARNED;
+            int stock = expressionStock(expressionKey);
+            if (stock <= 0) return ExpressionUseResult.NO_STOCK;
+            learned.add(expressionKey);
+            Set<String> active = new HashSet<>(enabledPetExpressions(petId));
+            active.add(expressionKey);
+            boolean saved = preferences.edit()
+                    .putInt(expressionStockPreference(expressionKey), stock - 1)
+                    .putStringSet(learnedExpressionsPreference(petId), learned)
+                    .putStringSet(enabledExpressionsPreference(petId), active)
+                    .commit();
+            return saved ? ExpressionUseResult.LEARNED : ExpressionUseResult.STORAGE_ERROR;
+        }
+    }
+
     public boolean isPetLookUnlocked(String lookKey) {
         PetLook look = PetLook.fromKey(lookKey);
         return look != null && (look == PetLook.ORIGINAL || look.isFree()
                 || ownedPetLookKeys().contains(lookKey));
     }
 
-    /** Balance deduction, permanent unlock/egg grant and receipt use one atomic preference edit. */
+    /** Balance deduction, item grant and receipt use one atomic preference edit. */
     public PurchaseResult purchase(String productId, String requestId) {
         ShopProduct product = ShopCatalog.product(productId);
         if (product == null) product = PetLookCatalog.product(productId);
+        if (product == null) product = PetExpressionCatalog.product(productId);
         return purchase(product, requestId);
     }
 
@@ -230,6 +292,14 @@ public final class FocusStore {
             if (product.productType == ProductType.PET_LOOK && ownedLooks.contains(product.itemKey)) {
                 return PurchaseResult.ALREADY_OWNED;
             }
+            if (product.productType == ProductType.PET_EXPRESSION) {
+                PetExpression expression = PetExpression.fromKey(product.itemKey);
+                if (expression == null || !expression.learnable
+                        || (long) expressionStock(product.itemKey) + product.quantityGranted
+                        > Integer.MAX_VALUE) {
+                    return PurchaseResult.INVALID_PRODUCT;
+                }
+            }
             int balance = product.currency == Currency.COINS ? coins() : lifeEssence();
             if (balance < product.price) return PurchaseResult.INSUFFICIENT_RESOURCES;
             if (product.productType == ProductType.PET_EGG
@@ -242,11 +312,30 @@ public final class FocusStore {
             } else if (product.productType == ProductType.PET_LOOK) {
                 ownedLooks.add(product.itemKey);
                 editor.putStringSet("owned_pet_looks", ownedLooks);
-            } else editor.putInt("pet_eggs", petEggs() + product.quantityGranted);
+            } else if (product.productType == ProductType.PET_EXPRESSION) {
+                editor.putInt(expressionStockPreference(product.itemKey),
+                        expressionStock(product.itemKey) + product.quantityGranted);
+            } else if (product.productType == ProductType.PET_EGG) {
+                editor.putInt("pet_eggs", petEggs() + product.quantityGranted);
+            } else {
+                return PurchaseResult.INVALID_PRODUCT;
+            }
             editor.putString("purchase_" + requestId, product.id + "|" + product.currency + "|" + product.price
                     + "|" + product.quantityGranted + "|" + System.currentTimeMillis());
             return editor.commit() ? PurchaseResult.PURCHASED : PurchaseResult.STORAGE_ERROR;
         }
+    }
+
+    private String expressionStockPreference(String expressionKey) {
+        return "expression_stock_" + expressionKey;
+    }
+
+    private String learnedExpressionsPreference(long petId) {
+        return "pet_" + petId + "_learned_expressions";
+    }
+
+    private String enabledExpressionsPreference(long petId) {
+        return "pet_" + petId + "_enabled_expressions";
     }
 
     boolean equip(long petId, String itemId) {

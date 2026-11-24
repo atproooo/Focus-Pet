@@ -27,6 +27,8 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.Button;
+import android.widget.CheckBox;
+import android.widget.CompoundButton;
 import android.widget.EditText;
 import android.widget.HorizontalScrollView;
 import android.widget.ImageView;
@@ -74,6 +76,7 @@ public class MainActivity extends AppCompatActivity {
     private FocusRepository repository;
     private ShopRepository shopRepository;
     private ShopCategory selectedShopCategory = ShopCategory.ALL;
+    private long expressionInventoryReturnPetId;
     private LinearLayout content;
     private LinearLayout navigation;
     private TextView title;
@@ -957,9 +960,13 @@ public class MainActivity extends AppCompatActivity {
                 PetInteraction.Action.PLAY, feedback, animationController);
         addInteraction(actions, screen, petId, "Rest", R.id.pet_interaction_rest,
                 PetInteraction.Action.REST, feedback, animationController);
-        Button wardrobe = button("Customize", v -> showWardrobe(petId));
-        wardrobe.setId(R.id.open_wardrobe);
-        actions.addView(wardrobe);
+        Button customize = button("Customize", v -> showCustomize(petId));
+        customize.setId(R.id.open_customize);
+        actions.addView(customize);
+        Button accessories = outlineButton(getString(R.string.accessories_button),
+                v -> showAccessories(petId));
+        accessories.setId(R.id.open_wardrobe);
+        actions.addView(accessories);
     }
 
     private void showHatching() {
@@ -1295,7 +1302,8 @@ public class MainActivity extends AppCompatActivity {
                 host.findViewById(R.id.pet_expression_bubble),
                 host.findViewById(R.id.pet_expression_bubble_image),
                 host.findViewById(R.id.pet_expression_overlay),
-                mode);
+                mode, pet == null ? java.util.Collections.emptySet()
+                        : store.enabledPetExpressions(pet.id));
         if (pet != null) {
             controller.setRestingExpression(PetExpression.forState(pet.mood, pet.energy));
         }
@@ -1317,42 +1325,6 @@ public class MainActivity extends AppCompatActivity {
 
     private void bindPetLook(View slot, Pet pet, PetLook look) {
         petArtworkRenderer.bind(slot, pet, look);
-    }
-
-    private void showPetLookPicker(long petId, View displayedArt) {
-        Pet pet = repository.pet(petId);
-        if (pet == null) return;
-        View picker = getLayoutInflater().inflate(R.layout.dialog_pet_look, null);
-        View preview = picker.findViewById(R.id.pet_animation_container);
-        RadioGroup options = picker.findViewById(R.id.pet_look_options);
-        PetLook currentLook = PetLook.forPet(pet);
-        for (PetLook look : PetLook.values()) {
-            if (look != currentLook && !store.isPetLookUnlocked(look.key)) continue;
-            if (!look.canChoose(pet) && look != currentLook) continue;
-            RadioButton option = new RadioButton(this);
-            option.setId(View.generateViewId());
-            option.setTag(look);
-            option.setText(look.label);
-            option.setMinHeight(dp(48));
-            options.addView(option);
-            if (look == currentLook) options.check(option.getId());
-        }
-        bindPetLook(preview, pet, currentLook);
-        options.setOnCheckedChangeListener((group, id) -> {
-            View option = group.findViewById(id);
-            if (option != null) bindPetLook(preview, pet, (PetLook) option.getTag());
-        });
-        showDefaultFontDialog(new AlertDialog.Builder(this)
-                .setTitle(R.string.pet_look_choose)
-                .setView(picker)
-                .setNegativeButton(android.R.string.cancel, null)
-                .setPositiveButton(R.string.pet_look_save, (dialog, which) -> {
-                    View selected = options.findViewById(options.getCheckedRadioButtonId());
-                    if (selected == null) return;
-                    PetLook look = (PetLook) selected.getTag();
-                    if (repository.savePetLook(petId, look)) bindPetLook(displayedArt, pet, look);
-                    else toast(getString(R.string.pet_look_save_error));
-                }));
     }
 
     private void showHatchSuccessDialog(Pet pet) {
@@ -1405,15 +1377,28 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void showShop() {
-        showShop(ShopCategory.ALL);
+        showShop(ShopCategory.ALL, 0);
     }
 
     private void showShop(ShopCategory category) {
+        showShop(category, 0);
+    }
+
+    private void showShop(ShopCategory category, long inventoryReturnPetId) {
         selectedShopCategory = category;
+        expressionInventoryReturnPetId = category == ShopCategory.EXPRESSIONS
+                ? inventoryReturnPetId : 0;
         reset("Shop");
         setSessionLock(false);
         setActiveTab(1);
         content.addView(outlineButton("Back to collection", v -> showCollection()));
+        if (expressionInventoryReturnPetId > 0) {
+            long returnPetId = expressionInventoryReturnPetId;
+            content.addView(outlineButton("Back to expression inventory", v -> {
+                expressionInventoryReturnPetId = 0;
+                showExpressionInventory(returnPetId);
+            }));
+        }
         LinearLayout balanceRow = new LinearLayout(this);
         balanceRow.setOrientation(LinearLayout.HORIZONTAL);
         balanceRow.setGravity(Gravity.CENTER_VERTICAL);
@@ -1431,16 +1416,15 @@ public class MainActivity extends AppCompatActivity {
         LinearLayout.LayoutParams balanceRowParams = new LinearLayout.LayoutParams(-1, -2);
         balanceRowParams.setMargins(dp(8), dp(10), 0, dp(8));
         content.addView(balanceRow, balanceRowParams);
-        content.addView(systemText("Unlock pet appearances with Coins.",
+        content.addView(systemText("Unlock pet looks and expressions with Coins.",
                 14, ContextCompat.getColor(this, R.color.text_secondary)));
         addShopCategories();
         List<ShopProductEntity> products = new ArrayList<>();
         for (ShopProductEntity product : shopRepository.availableProducts()) {
             if (category.includes(product)) products.add(product);
         }
-        Set<String> ownedPetLooks = store.ownedPetLookKeys();
         products.sort((first, second) -> Boolean.compare(
-                ownedPetLooks.contains(first.itemKey), ownedPetLooks.contains(second.itemKey)));
+                isShopProductOwned(first), isShopProductOwned(second)));
         if (products.isEmpty()) {
             content.addView(systemText("No items in this category yet.", 16,
                     ContextCompat.getColor(this, R.color.text_secondary)));
@@ -1463,7 +1447,8 @@ public class MainActivity extends AppCompatActivity {
             }
         }
         Pet selected = repository.selectedPet();
-        if (selected != null) content.addView(button("Customize companion", v -> showWardrobe(selected.id)));
+        if (selected != null) content.addView(button("Customize companion",
+                v -> showCustomize(selected.id)));
     }
 
     private void addShopCategories() {
@@ -1492,6 +1477,7 @@ public class MainActivity extends AppCompatActivity {
     private View shopProductCard(ShopProductEntity product) {
         ProductType type = ProductType.valueOf(product.productType);
         boolean owned = isShopProductOwned(product);
+        boolean repeatable = type == ProductType.PET_EXPRESSION;
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
         card.setPadding(dp(8), dp(8), dp(8), dp(8));
@@ -1509,6 +1495,13 @@ public class MainActivity extends AppCompatActivity {
                 throw new IllegalStateException("Shop product references an unknown pet look: " + product.itemKey);
             }
             addPetLookArtwork(artworkFrame, look, product, owned, "pet_look_art_");
+        } else if (type == ProductType.PET_EXPRESSION) {
+            PetExpression expression = PetExpression.fromKey(product.itemKey);
+            if (expression == null || !expression.learnable) {
+                throw new IllegalStateException("Shop product references an unknown expression: " + product.itemKey);
+            }
+            artworkFrame.addView(expressionPreview(expression, -1, -1),
+                    new FrameLayout.LayoutParams(-1, -1));
         } else {
             TextView placeholder = text(product.categoryKey, 14,
                     ContextCompat.getColor(this, R.color.text_secondary));
@@ -1517,7 +1510,7 @@ public class MainActivity extends AppCompatActivity {
             artworkFrame.addView(placeholder, new FrameLayout.LayoutParams(-1, -1));
         }
 
-        TextView name = text(product.name, 16, purpleDark);
+        TextView name = text(shopProductName(product), 16, purpleDark);
         name.setMaxLines(2);
         card.addView(name);
 
@@ -1531,10 +1524,17 @@ public class MainActivity extends AppCompatActivity {
         priceParams.setMargins(0, dp(6), 0, dp(4));
         card.addView(price, priceParams);
 
-        String label = owned ? "Owned" : enough ? "Buy" : "Not enough " + currency;
+        if (repeatable) {
+            TextView stock = systemText(getString(R.string.expression_inventory_stock,
+                    store.expressionStock(product.itemKey)), 13,
+                    ContextCompat.getColor(this, R.color.text_secondary));
+            card.addView(stock);
+        }
+        String label = repeatable ? (enough ? "Buy" : "Not enough " + currency)
+                : owned ? "Owned" : enough ? "Buy" : "Not enough " + currency;
         Button buy = button(label, v -> confirmPurchase(product));
         buy.setTag("buy_" + product.id);
-        setAvailable(buy, !owned && enough);
+        setAvailable(buy, (repeatable || !owned) && enough);
         card.addView(buy, new LinearLayout.LayoutParams(-1, dp(44)));
         return card;
     }
@@ -1549,10 +1549,14 @@ public class MainActivity extends AppCompatActivity {
         confirmation.addView(text(product.price + " "
                 + (Currency.valueOf(product.currency) == Currency.COINS ? "Coins" : "Essence"),
                 16, purpleDark));
-        String title = ProductType.valueOf(product.productType) == ProductType.PET_LOOK
-                ? "Unlock " + product.name + "?" : "Buy " + product.name + "?";
-        String benefit = ProductType.valueOf(product.productType) == ProductType.PET_LOOK
-                ? "This appearance will be unlocked for all your pets."
+        ProductType type = ProductType.valueOf(product.productType);
+        String productName = shopProductName(product);
+        String title = type == ProductType.PET_LOOK
+                ? "Unlock " + productName + "?" : "Buy " + productName + "?";
+        String benefit = type == ProductType.PET_LOOK
+                ? "This appearance will be available when hatching a pet."
+                : type == ProductType.PET_EXPRESSION
+                ? "This adds one expression item to your inventory. Use it to teach one pet."
                 : "This item will be permanently unlocked for your pets.";
         confirmation.addView(systemText(benefit, 14,
                 ContextCompat.getColor(this, R.color.text_secondary)));
@@ -1561,11 +1565,20 @@ public class MainActivity extends AppCompatActivity {
                 .setNegativeButton("Cancel", null)
                 .setPositiveButton("Buy", (dialog, which) -> {
                     FocusStore.PurchaseResult result = shopRepository.purchase(product.id, requestId);
-                    if (result == FocusStore.PurchaseResult.PURCHASED) toast("Purchased " + product.name + ".");
+                    if (result == FocusStore.PurchaseResult.PURCHASED) {
+                        toast("Purchased " + productName + ".");
+                    }
                     else if (result == FocusStore.PurchaseResult.ALREADY_OWNED) toast("You already own this item.");
                     else if (result == FocusStore.PurchaseResult.INSUFFICIENT_RESOURCES) toast("Not enough resources.");
                     else toast("Purchase could not be saved. Please try again.");
-                    showShop(selectedShopCategory);
+                    long returnPetId = expressionInventoryReturnPetId;
+                    if (result == FocusStore.PurchaseResult.PURCHASED
+                            && type == ProductType.PET_EXPRESSION && returnPetId > 0) {
+                        expressionInventoryReturnPetId = 0;
+                        showExpressionInventory(returnPetId);
+                    } else {
+                        showShop(selectedShopCategory, returnPetId);
+                    }
                 }));
     }
 
@@ -1573,13 +1586,21 @@ public class MainActivity extends AppCompatActivity {
         FrameLayout frame = new FrameLayout(this);
         frame.setBackground(roundColor(ContextCompat.getColor(this, R.color.background_accent), 6));
         frame.setLayoutParams(new LinearLayout.LayoutParams(size, size));
-        if (ProductType.valueOf(product.productType) == ProductType.PET_LOOK) {
+        ProductType type = ProductType.valueOf(product.productType);
+        if (type == ProductType.PET_LOOK) {
             PetLook look = PetLook.fromKey(product.itemKey);
             if (look == null || look.artworkFor(null) == 0) {
                 throw new IllegalStateException("Shop product references an unknown pet look: " + product.itemKey);
             }
             addPetLookArtwork(frame, look, product, isShopProductOwned(product),
                     "pet_look_dialog_art_");
+        } else if (type == ProductType.PET_EXPRESSION) {
+            PetExpression expression = PetExpression.fromKey(product.itemKey);
+            if (expression == null || !expression.learnable) {
+                throw new IllegalStateException("Shop product references an unknown expression: " + product.itemKey);
+            }
+            frame.addView(expressionPreview(expression, -1, -1),
+                    new FrameLayout.LayoutParams(-1, -1));
         } else {
             TextView placeholder = text(product.categoryKey, 14,
                     ContextCompat.getColor(this, R.color.text_secondary));
@@ -1615,20 +1636,265 @@ public class MainActivity extends AppCompatActivity {
         if (type == ProductType.PET_LOOK) {
             return store.ownedPetLookKeys().contains(product.itemKey);
         }
+        if (type == ProductType.PET_EXPRESSION) {
+            return store.expressionStock(product.itemKey) > 0;
+        }
         return type == ProductType.COSMETIC
                 && store.ownedCosmeticIds().contains(product.itemKey);
     }
 
-    private void showWardrobe(long petId) {
+    private String shopProductName(ShopProductEntity product) {
+        if (ProductType.valueOf(product.productType) == ProductType.PET_EXPRESSION) {
+            PetExpression expression = PetExpression.fromKey(product.itemKey);
+            if (expression == null || !expression.learnable) {
+                throw new IllegalStateException("Shop product references an unknown expression: " + product.itemKey);
+            }
+            return getString(expression.nameRes) + " expression";
+        }
+        return product.name;
+    }
+
+    private void showCustomize(long petId) {
         Pet pet = repository.pet(petId);
         if (pet == null) { showCollection(); return; }
+        expressionInventoryReturnPetId = 0;
         reset("Customize " + pet.name);
         setActiveTab(1);
         content.addView(outlineButton("Back to pet", v -> showPetDetail(pet)));
         View art = petAnimationSlot(pet);
+        art.setBackgroundResource(R.drawable.bg_focuspet_image_placeholder);
+        content.addView(art, new LinearLayout.LayoutParams(-1, dp(164)));
+        content.addView(systemText(getString(R.string.appearance_fixed_message), 14,
+                ContextCompat.getColor(this, R.color.text_secondary)));
+        TextView heading = text("Expressions", 22, purpleDark);
+        heading.setPadding(0, dp(12), 0, 0);
+        content.addView(heading);
+        content.addView(systemText(getString(R.string.customize_expressions_intro), 14,
+                ContextCompat.getColor(this, R.color.text_secondary)));
+
+        Button inventory = outlineButton(getString(R.string.expression_inventory_button),
+                v -> showExpressionInventory(petId));
+        inventory.setId(R.id.open_expression_inventory);
+        LinearLayout.LayoutParams inventoryParams =
+                new LinearLayout.LayoutParams(-1, dp(48));
+        inventoryParams.setMargins(0, dp(10), 0, dp(10));
+        content.addView(inventory, inventoryParams);
+
+        Set<String> learned = store.learnedPetExpressions(petId);
+        if (learned.isEmpty()) {
+            LinearLayout emptyState = new LinearLayout(this);
+            emptyState.setGravity(Gravity.CENTER);
+            emptyState.setBackgroundResource(R.drawable.bg_focuspet_card);
+            emptyState.setPadding(dp(16), dp(14), dp(16), dp(14));
+            emptyState.addView(systemText(getString(R.string.expression_learned_empty), 15,
+                    ContextCompat.getColor(this, R.color.text_secondary)));
+            content.addView(emptyState);
+        } else {
+            for (PetExpression expression : PetExpression.LEARNABLE) {
+                if (learned.contains(expression.key)) {
+                    addLearnedExpressionRow(petId, expression);
+                }
+            }
+        }
+    }
+
+    private void addLearnedExpressionRow(long petId, PetExpression expression) {
+        LinearLayout row = new LinearLayout(this);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setBackgroundResource(R.drawable.bg_focuspet_card);
+        row.setPadding(dp(8), dp(6), dp(8), dp(6));
+        row.setMinimumHeight(dp(72));
+
+        row.addView(expressionPreview(expression, dp(68), dp(58)),
+                new LinearLayout.LayoutParams(dp(68), dp(58)));
+        LinearLayout details = new LinearLayout(this);
+        details.setOrientation(LinearLayout.VERTICAL);
+        details.setPadding(dp(8), 0, dp(4), 0);
+        TextView name = text(getString(expression.nameRes), 16, purpleDark);
+        name.setPadding(0, 0, 0, 0);
+        details.addView(name);
+        TextView description = systemText(getString(expression.descriptionRes), 13,
+                ContextCompat.getColor(this, R.color.text_secondary));
+        description.setPadding(0, dp(2), 0, 0);
+        description.setMaxLines(2);
+        details.addView(description);
+        row.addView(details, new LinearLayout.LayoutParams(0, -2, 1));
+
+        CheckBox use = new CheckBox(this);
+        use.setText(R.string.expression_use_toggle);
+        use.setTextColor(ContextCompat.getColor(this, R.color.text_primary));
+        use.setTypeface(pixelFont);
+        use.setTextSize(TypedValue.COMPLEX_UNIT_PX, textSizeResource(14));
+        use.setContentDescription(getString(R.string.expression_use_accessibility,
+                getString(expression.nameRes)));
+        use.setMinHeight(dp(48));
+        use.setPadding(0, 0, 0, 0);
+        use.setChecked(store.enabledPetExpressions(petId).contains(expression.key));
+        use.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            @Override public void onCheckedChanged(CompoundButton buttonView, boolean checked) {
+                if (store.setPetExpressionEnabled(petId, expression.key, checked)) return;
+                buttonView.setOnCheckedChangeListener(null);
+                buttonView.setChecked(!checked);
+                buttonView.setOnCheckedChangeListener(this);
+                toast("Could not save this expression setting.");
+            }
+        });
+        row.addView(use, new LinearLayout.LayoutParams(-2, dp(52)));
+
+        LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(-1, -2);
+        rowParams.setMargins(0, dp(4), 0, dp(6));
+        content.addView(row, rowParams);
+    }
+
+    private FrameLayout expressionPreview(PetExpression expression, int width, int height) {
+        FrameLayout preview = new FrameLayout(this);
+        if (width > 0 && height > 0) {
+            preview.setLayoutParams(new FrameLayout.LayoutParams(width, height));
+        }
+        preview.setContentDescription(getString(expression.descriptionRes));
+        ImageView bubble = new ImageView(this);
+        bubble.setImageResource(R.drawable.bubble_thinking);
+        bubble.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        bubble.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        preview.addView(bubble, new FrameLayout.LayoutParams(-1, -1));
+
+        TextView art = new TextView(this);
+        art.setText(expression.asciiArt);
+        art.setGravity(Gravity.CENTER);
+        art.setTextColor(ContextCompat.getColor(this, R.color.text_primary));
+        art.setTypeface(Typeface.MONOSPACE);
+        art.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10);
+        art.setTextScaleX(0.85f);
+        art.setMaxLines(2);
+        art.setIncludeFontPadding(false);
+        art.setAutoSizeTextTypeUniformWithConfiguration(
+                6, 10, 1, TypedValue.COMPLEX_UNIT_SP);
+        art.setPadding(dp(4), 0, dp(4), dp(8));
+        art.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        FrameLayout.LayoutParams artParams = new FrameLayout.LayoutParams(-1, -1);
+        artParams.setMargins(dp(10), dp(8), dp(10), dp(10));
+        preview.addView(art, artParams);
+        return preview;
+    }
+
+    private void showExpressionInventory(long petId) {
+        Pet pet = repository.pet(petId);
+        if (pet == null) { showCollection(); return; }
+        reset("Expression inventory");
+        setActiveTab(1);
+        content.addView(outlineButton("Back to expressions", v -> showCustomize(petId)));
+        content.addView(systemText(
+                getString(R.string.expression_inventory_intro, pet.name), 14,
+                ContextCompat.getColor(this, R.color.text_secondary)));
+
+        Set<String> learned = store.learnedPetExpressions(petId);
+        boolean hasItems = false;
+        for (PetExpression expression : PetExpression.LEARNABLE) {
+            int stock = store.expressionStock(expression.key);
+            if (stock <= 0) continue;
+            hasItems = true;
+            addExpressionInventoryRow(pet, expression, stock,
+                    learned.contains(expression.key));
+        }
+        if (!hasItems) {
+            LinearLayout emptyState = new LinearLayout(this);
+            emptyState.setOrientation(LinearLayout.VERTICAL);
+            emptyState.setBackgroundResource(R.drawable.bg_focuspet_card);
+            emptyState.setPadding(dp(16), dp(12), dp(16), dp(12));
+            emptyState.addView(systemText(getString(R.string.expression_inventory_empty), 15,
+                    ContextCompat.getColor(this, R.color.text_secondary)));
+            content.addView(emptyState);
+        }
+        content.addView(button(getString(R.string.expression_shop_button),
+                v -> showShop(ShopCategory.EXPRESSIONS, petId)));
+    }
+
+    private void addExpressionInventoryRow(
+            Pet pet, PetExpression expression, int stock, boolean alreadyLearned) {
+        LinearLayout row = new LinearLayout(this);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setBackgroundResource(R.drawable.bg_focuspet_card);
+        row.setPadding(dp(8), dp(6), dp(8), dp(6));
+        row.setMinimumHeight(dp(72));
+        row.addView(expressionPreview(expression, dp(68), dp(58)),
+                new LinearLayout.LayoutParams(dp(68), dp(58)));
+
+        LinearLayout details = new LinearLayout(this);
+        details.setOrientation(LinearLayout.VERTICAL);
+        details.setPadding(dp(8), 0, dp(4), 0);
+        TextView name = text(getString(expression.nameRes), 16, purpleDark);
+        name.setPadding(0, 0, 0, 0);
+        details.addView(name);
+        TextView quantity = systemText(
+                getString(R.string.expression_inventory_stock, stock), 13,
+                ContextCompat.getColor(this, R.color.text_secondary));
+        quantity.setPadding(0, dp(2), 0, 0);
+        details.addView(quantity);
+        if (alreadyLearned) {
+            TextView learned = systemText("Already learned by " + pet.name, 13,
+                    ContextCompat.getColor(this, R.color.text_secondary));
+            learned.setPadding(0, dp(2), 0, 0);
+            details.addView(learned);
+        }
+        row.addView(details, new LinearLayout.LayoutParams(0, -2, 1));
+
+        Button teach = outlineButton(
+                getString(alreadyLearned ? R.string.expression_learned : R.string.expression_teach),
+                v -> confirmTeachExpression(pet.id, expression));
+        teach.setTag("teach_expression_" + expression.key);
+        teach.setEnabled(!alreadyLearned);
+        row.addView(teach, new LinearLayout.LayoutParams(dp(92), dp(48)));
+        LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(-1, -2);
+        rowParams.setMargins(0, dp(4), 0, dp(6));
+        content.addView(row, rowParams);
+    }
+
+    private void confirmTeachExpression(long petId, PetExpression expression) {
+        Pet pet = repository.pet(petId);
+        if (pet == null) { showCollection(); return; }
+        String expressionName = getString(expression.nameRes);
+        showDefaultFontDialog(new AlertDialog.Builder(this)
+                .setTitle(getString(R.string.expression_teach_confirmation_title,
+                        expressionName, pet.name))
+                .setMessage(getString(R.string.expression_teach_confirmation_message,
+                        expressionName, pet.name))
+                .setNegativeButton(android.R.string.cancel, null)
+                .setPositiveButton(R.string.expression_teach, (dialog, which) -> {
+                    Pet latest = repository.pet(petId);
+                    if (latest == null) { showCollection(); return; }
+                    FocusStore.ExpressionUseResult result =
+                            store.teachExpression(petId, expression.key);
+                    if (result == FocusStore.ExpressionUseResult.LEARNED) {
+                        toast(getString(R.string.expression_taught,
+                                latest.name, expressionName));
+                        showCustomize(petId);
+                    } else {
+                        if (result == FocusStore.ExpressionUseResult.ALREADY_LEARNED) {
+                            toast("This pet has already learned this expression.");
+                        } else if (result == FocusStore.ExpressionUseResult.NO_STOCK) {
+                            toast("This expression item is no longer available.");
+                        } else {
+                            toast("Could not save this expression. Please try again.");
+                        }
+                        showExpressionInventory(petId);
+                    }
+                }));
+    }
+
+    private void showAccessories(long petId) {
+        Pet pet = repository.pet(petId);
+        if (pet == null) { showCollection(); return; }
+        expressionInventoryReturnPetId = 0;
+        reset("Accessories " + pet.name);
+        setActiveTab(1);
+        content.addView(outlineButton("Back to pet", v -> showPetDetail(pet)));
+        View art = petAnimationSlot(pet);
+        art.setBackgroundResource(R.drawable.bg_focuspet_image_placeholder);
         content.addView(art);
-        content.addView(button(getString(R.string.pet_look_choose), v -> showPetLookPicker(petId, art)));
-        content.addView(text("Wearing: " + equippedSummary(petId), 17, ContextCompat.getColor(this, R.color.text_secondary)));
+        content.addView(systemText(getString(R.string.appearance_fixed_message), 14,
+                ContextCompat.getColor(this, R.color.text_secondary)));
+        content.addView(text("Wearing: " + equippedSummary(petId), 17,
+                ContextCompat.getColor(this, R.color.text_secondary)));
         boolean hasItems = false;
         for (CosmeticItem item : ShopCatalog.COSMETICS) {
             if (!store.ownedCosmeticIds().contains(item.id)) continue;
@@ -1638,12 +1904,14 @@ public class MainActivity extends AppCompatActivity {
             Button toggle = button(equipped ? "Remove " + item.name : "Equip " + item.name, v -> {
                 if (equipped) store.unequip(petId, item.slotKey);
                 else if (!repository.equipCosmetic(petId, item.id)) toast("This item is not available.");
-                showWardrobe(petId);
+                showAccessories(petId);
             });
             toggle.setTag("equip_" + item.id);
             content.addView(toggle);
         }
-        if (!hasItems) content.addView(systemText("Buy clothing and decorations in the shop to customize your pet.", 16, ContextCompat.getColor(this, R.color.text_secondary)));
+        if (!hasItems) content.addView(systemText(
+                "Buy clothing and decorations in the shop to customize your pet.",
+                16, ContextCompat.getColor(this, R.color.text_secondary)));
         content.addView(button("Shop", v -> showShop()));
     }
 

@@ -166,11 +166,6 @@ public final class FocusRepository {
 
     public Pet pet(long id) { return run(() -> pets.byId(id)); }
 
-    boolean savePetLook(long petId, PetLook look) {
-        if (look == null || !progress.isPetLookUnlocked(look.key)) return false;
-        return run(() -> pets.updateAppearance(petId, look.key) == 1);
-    }
-
     public Pet ensureStarterPet() {
         return run(() -> {
             Pet selected = pets.selected();

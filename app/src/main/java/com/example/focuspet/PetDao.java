@@ -29,9 +29,6 @@ public interface PetDao {
     @Query("UPDATE pets SET imageKey = :imageKey, appearanceData = :appearanceData WHERE id = :id AND appearanceData = :oldAppearance")
     int updateAppearanceIfMatches(long id, String oldAppearance, String imageKey, String appearanceData);
 
-    @Query("UPDATE pets SET appearanceData = :lookKey WHERE id = :id")
-    int updateAppearance(long id, String lookKey);
-
     @Query("SELECT * FROM pets WHERE hatchRequestId = :requestId LIMIT 1")
     Pet byHatchRequest(String requestId);
 

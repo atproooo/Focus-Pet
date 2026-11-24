@@ -10,7 +10,7 @@ public final class FocusPetModels {
     private FocusPetModels() { }
 
     public enum Currency { COINS, ESSENCE }
-    public enum ProductType { COSMETIC, PET_EGG, PET_LOOK }
+    public enum ProductType { COSMETIC, PET_EGG, PET_LOOK, PET_EXPRESSION }
 
     private static String required(String value, String field) {
         if (value == null || value.trim().isEmpty()) {
@@ -32,10 +32,12 @@ public final class FocusPetModels {
     private static void checkProductCurrency(ProductType type, Currency currency) {
         Objects.requireNonNull(type, "productType");
         Objects.requireNonNull(currency, "currency");
-        if (((type == ProductType.COSMETIC || type == ProductType.PET_LOOK)
+        if (((type == ProductType.COSMETIC || type == ProductType.PET_LOOK
+                || type == ProductType.PET_EXPRESSION)
                 && currency != Currency.COINS)
                 || (type == ProductType.PET_EGG && currency != Currency.ESSENCE)) {
-            throw new IllegalArgumentException("Cosmetics and pet looks use coins; pet eggs use essence");
+            throw new IllegalArgumentException(
+                    "Cosmetics, pet looks, and expressions use coins; pet eggs use essence");
         }
     }
 
