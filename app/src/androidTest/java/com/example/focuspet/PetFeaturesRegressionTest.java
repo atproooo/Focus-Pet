@@ -13,6 +13,7 @@ import org.junit.*;
 import org.junit.runner.RunWith;
 import java.util.*;
 import java.util.concurrent.*;
+import com.example.focuspet.model.FocusPetModels.ShopProduct;
 import static androidx.test.espresso.Espresso.onView;
 import static androidx.test.espresso.action.ViewActions.*;
 import static androidx.test.espresso.assertion.ViewAssertions.*;
@@ -44,6 +45,11 @@ public class PetFeaturesRegressionTest {
     void launch(){a=InstrumentationRegistry.getInstrumentation().startActivitySync(new Intent(c,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));InstrumentationRegistry.getInstrumentation().waitForIdleSync();}
     void reopen(){InstrumentationRegistry.getInstrumentation().runOnMainSync(a::finish);InstrumentationRegistry.getInstrumentation().waitForIdleSync();launch();}
     void hatchScreen(){onView(withText("Collection")).perform(click());onView(withId(R.id.pet_eggs_chip)).perform(click());}
+    void hatchAndConfirm(){
+        onView(withId(R.id.hatch_button)).perform(scrollTo(), click());
+        onView(withText(R.string.hatch_confirmation_title)).check(matches(isDisplayed()));
+        onView(withText(R.string.hatch_confirmation_confirm)).perform(click());
+    }
     void assertResourceChipIcon(String label, int iconResource) {
         onView(withText(label)).check((view, error) -> {
             ImageView image = ((ViewGroup) view.getParent())
@@ -60,7 +66,105 @@ public class PetFeaturesRegressionTest {
     HatchDraft readyDraft(String requestId,String name,String look){HatchDraft draft=new HatchDraft();draft.id=requestId;draft.name=name;draft.appearanceKey=look;draft.step=HatchDraft.STEP_PREVIEW;draft.createdAt=System.currentTimeMillis();db.hatchDraftDao().insert(draft);return draft;}
     void collect(View v,int id,List<View> result){if(v.getId()==id)result.add(v);if(v instanceof ViewGroup)for(int i=0;i<((ViewGroup)v).getChildCount();i++)collect(((ViewGroup)v).getChildAt(i),id,result);}
     View view(int id){List<View> result=new ArrayList<>();InstrumentationRegistry.getInstrumentation().runOnMainSync(()->collect(a.getWindow().getDecorView(),id,result));assertEquals(1,result.size());return result.get(0);}
+    int countViews(int id){List<View> result=new ArrayList<>();InstrumentationRegistry.getInstrumentation().runOnMainSync(()->collect(a.getWindow().getDecorView(),id,result));return result.size();}
     int topOfTaggedView(String tag){int[] location=new int[2];onView(withTagValue(is((Object)tag))).check((target,error)->target.getLocationOnScreen(location));return location[1];}
+    int parentHeightOfTaggedView(String tag){int[] height=new int[1];onView(withTagValue(is((Object)tag))).check((target,error)->height[0]=((View)target.getParent()).getHeight());return height[0];}
+    int cardLeftOfTaggedView(String tag){int[] location=new int[2];onView(withTagValue(is((Object)tag))).check((target,error)->((View)target.getParent()).getLocationOnScreen(location));return location[0];}
+    int cardTopOfTaggedView(String tag){int[] location=new int[2];onView(withTagValue(is((Object)tag))).check((target,error)->((View)target.getParent()).getLocationOnScreen(location));return location[1];}
+
+    @Test public void focusSessionKeepsThePetBackgroundSnapshot() {
+        resources(500,0,0);
+        Pet pet=repo.ensureStarterPet();
+        com.example.focuspet.model.FocusPetModels.ShopProduct first=BackgroundCatalog.PRODUCTS.get(0);
+        com.example.focuspet.model.FocusPetModels.ShopProduct second=BackgroundCatalog.PRODUCTS.get(1);
+        com.example.focuspet.model.FocusPetModels.ShopProduct accessory=AccessoryCatalog.PRODUCTS.get(0);
+        assertEquals(FocusStore.PurchaseResult.PURCHASED,store.purchase(first,"snapshot-bg-one"));
+        assertEquals(FocusStore.PurchaseResult.PURCHASED,store.purchase(second,"snapshot-bg-two"));
+        assertEquals(FocusStore.PurchaseResult.PURCHASED,store.purchase(accessory,"snapshot-accessory"));
+        assertTrue(store.setPetBackground(pet.id,first.itemKey));
+        assertTrue(store.equip(pet.id,accessory.itemKey));
+
+        long sessionId=repo.startSession(25,"Background snapshot");
+        FocusSession session=repo.pendingSession(sessionId);
+        assertEquals(pet.id,session.petId);
+        assertEquals(pet.name,session.petName);
+        assertEquals(pet.appearanceData,session.petAppearanceData);
+        assertEquals(first.itemKey,session.backgroundKey);
+        assertEquals(accessory.itemKey,session.accessoryKey);
+
+        assertTrue(store.setPetBackground(pet.id,second.itemKey));
+        assertEquals(first.itemKey,repo.pendingSession(sessionId).backgroundKey);
+    }
+
+    @Test public void zeroRewardPendingSessionsAreCancelledAndCannotBeClaimed() {
+        repo.ensureStarterPet();
+        FocusSession session=new FocusSession();
+        session.startedAt=System.currentTimeMillis();
+        session.endedAt=session.startedAt+60_000L;
+        session.plannedMinutes=25;
+        session.actualMinutes=2;
+        session.label="No rewards";
+        session.status=FocusSession.STATUS_COMPLETED;
+        session.endedEarly=true;
+        long id=db.focusSessionDao().insert(session);
+
+        assertFalse(repo.claimRewards(id));
+        assertNull(repo.latestPending());
+        assertEquals(FocusSession.STATUS_CANCELLED,repo.pendingSession(id).status);
+    }
+
+    @Test public void normallyCompletedSessionUnderFiveMinutesHasNoClaimableRewards(){repo.ensureStarterPet();long id=repo.startSession(5,"Four minutes");repo.completeSession(id,4);FocusSession session=repo.pendingSession(id);assertEquals(FocusSession.STATUS_COMPLETED_NO_REWARD,session.status);assertEquals(4,session.actualMinutes);assertEquals(0,session.xpReward);assertFalse(repo.claimRewards(id));assertEquals(4,store.todayMinutes());}
+
+    @Test public void normallyCompletedFiveMinuteSessionEarnsRewards(){repo.ensureStarterPet();long id=repo.startSession(5,"Five minutes");repo.completeSession(id,5);FocusSession session=repo.pendingSession(id);assertEquals(FocusSession.STATUS_COMPLETED,session.status);assertEquals(5,session.actualMinutes);assertTrue(repo.hasClaimableRewards(session));assertEquals(5,store.todayMinutes());}
+
+    @Test public void focusSetupUsesSharedBackNavigationButton(){launch();onView(withText("Start focus")).perform(scrollTo(),click());onView(withText("< Back")).check(matches(isDisplayed())).perform(click());onView(withText("Start focus")).check(matches(isDisplayed()));}
+
+    @Test public void petCardsHideBackgroundAndDetailsKeepItOutsideTheArtworkLayer() {
+        resources(100,0,0);
+        Pet pet=repo.ensureStarterPet();
+        com.example.focuspet.model.FocusPetModels.ShopProduct background=BackgroundCatalog.PRODUCTS.get(0);
+        assertEquals(FocusStore.PurchaseResult.PURCHASED,
+                store.purchase(background,"card-background-purchase"));
+        assertTrue(store.setPetBackground(pet.id,background.itemKey));
+
+        launch();
+        ImageView cardBackground=(ImageView)view(R.id.pet_background_image);
+        assertEquals(View.GONE,cardBackground.getVisibility());
+        onView(withText("Collection")).perform(click());
+        assertEquals(View.GONE,((ImageView)view(R.id.pet_background_image)).getVisibility());
+        onView(withId(R.id.pet_card)).perform(click());
+
+        ImageView detailBackground=(ImageView)view(R.id.pet_background_image);
+        assertEquals(View.VISIBLE,detailBackground.getVisibility());
+        assertSame(view(R.id.pet_animation_container),detailBackground.getParent());
+        assertNotSame(view(R.id.pet_artwork_layer),detailBackground.getParent());
+    }
+
+    @Test public void sessionEndOmitsBackgroundAndHistoryDetailsShowOnlyTheBackground() {
+        resources(100,0,0);
+        Pet pet=repo.ensureStarterPet();
+        com.example.focuspet.model.FocusPetModels.ShopProduct background=BackgroundCatalog.PRODUCTS.get(0);
+        assertEquals(FocusStore.PurchaseResult.PURCHASED,
+                store.purchase(background,"history-background-purchase"));
+        assertTrue(store.setPetBackground(pet.id,background.itemKey));
+        long sessionId=repo.startSession(25,"Saved art");
+        repo.completeSession(sessionId,10);
+
+        launch();
+        assertEquals(0,countViews(R.id.pet_background_image));
+        onView(withText("Continue to claim")).perform(click());
+        onView(withText("★ +10 XP")).check((view,error)->assertEquals(0,view.getPaddingLeft()));
+        onView(withText("Claim rewards")).perform(click());
+        onView(withText("Statistics")).perform(click());
+        onView(withText(containsString("Saved art - Completed"))).perform(click());
+        onView(withText("★ +10 XP")).check((view,error)->assertEquals(0,view.getPaddingLeft()));
+
+        FrameLayout illustration=(FrameLayout)view(R.id.history_detail_art);
+        assertEquals(1,illustration.getChildCount());
+        assertNull(illustration.findViewById(R.id.pet_animation_image));
+        assertEquals(BackgroundCatalog.fromKey(background.itemKey).name,
+                illustration.getChildAt(0).getContentDescription());
+    }
 
     @Test public void starterUsesPetNameAndClassicArtworkAndMigratesLegacyDefaults() {
         Pet legacy = new Pet();
@@ -104,11 +208,26 @@ public class PetFeaturesRegressionTest {
         assertResourceChipIcon("Eggs 5", R.drawable.icon_eggs);
     }
 
+    @Test public void collectionCurrencyChipsNavigateWithoutShowingDialogs() {
+        resources(12, 34, 5);
+        launch();
+        onView(withText("Collection")).perform(click());
+
+        onView(withId(R.id.coins_chip)).perform(click());
+        onView(withId(R.id.shop_balance)).check(matches(isDisplayed()));
+        onView(withText("OK")).check(doesNotExist());
+
+        onView(withText("< Back to collection")).perform(scrollTo(), click());
+        onView(withId(R.id.essence_chip)).perform(click());
+        onView(withId(R.id.hatch_button)).perform(scrollTo()).check(matches(isDisplayed()));
+        onView(withText("OK")).check(doesNotExist());
+    }
+
     @Test public void hatchRequiresNameAndAppearanceAndAddsPetOnlyAfterConfirmation() {
         resources(0, 100, 1);
         launch();
         hatchScreen();
-        onView(withId(R.id.hatch_button)).perform(scrollTo(), click());
+        hatchAndConfirm();
         onView(withId(R.id.hatch_name_input)).perform(typeText("Mallow"));
         onView(withText("Continue")).perform(scrollTo(), click());
         assertEquals(1, repo.pets().size());
@@ -151,7 +270,7 @@ public class PetFeaturesRegressionTest {
         resources(0, 100, 1);
         launch();
         hatchScreen();
-        onView(withId(R.id.hatch_button)).perform(scrollTo(), click());
+        hatchAndConfirm();
         onView(withId(R.id.hatch_name_input)).perform(typeText("Cloud"));
         InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK);
         InstrumentationRegistry.getInstrumentation().waitForIdleSync();
@@ -174,7 +293,9 @@ public class PetFeaturesRegressionTest {
         launch();
         onView(withText("Collection")).perform(click());
         onView(withId(R.id.open_shop)).perform(scrollTo(), click());
-        assertEquals(10, ShopRepository.getInstance(c).availableProducts().size());
+        assertEquals(ShopCatalog.PRODUCTS.size() + PetLookCatalog.PRODUCTS.size()
+                        + PetExpressionCatalog.PRODUCTS.size() + AccessoryCatalog.PRODUCTS.size(),
+                ShopRepository.getInstance(c).availableProducts().size());
         onView(withText("Pet Looks")).perform(click());
         onView(withTagValue(is((Object) "buy_look_mint_star"))).perform(scrollTo(), click());
         onView(withText("Unlock Mint Star?")).check(matches(isDisplayed()));
@@ -186,25 +307,100 @@ public class PetFeaturesRegressionTest {
         assertTrue(store.isPetLookUnlocked("mint_star"));
         onView(withTagValue(is((Object) "pet_look_art_mint_star")))
                 .check(matches(withContentDescription("Mint Star")));
-        assertTrue(topOfTaggedView("buy_look_mint_star")
-                > topOfTaggedView("buy_look_cloud_wings"));
+    }
+
+    @Test public void expressionsCanBePurchasedInSelectedQuantitiesWithoutMovingInShop() {
+        resources(500, 0, 0);
+        launch();
+        onView(withText("Collection")).perform(click());
+        onView(withId(R.id.open_shop)).perform(click());
+        onView(withText("Expressions")).perform(click());
+        for (ShopProduct product : PetExpressionCatalog.PRODUCTS) {
+            PetExpression expression = PetExpression.fromKey(product.itemKey);
+            assertNotNull(expression);
+            String name = c.getString(expression.nameRes);
+            onView(withText(name)).check(matches(withText(name)));
+            onView(withText(name + " expression")).check(doesNotExist());
+        }
+        String firstProductTag = "buy_" + PetExpressionCatalog.PRODUCTS.get(0).id;
+        String secondProductTag = "buy_" + PetExpressionCatalog.PRODUCTS.get(1).id;
+        int firstPosition = topOfTaggedView(firstProductTag);
+        int secondPosition = topOfTaggedView(secondProductTag);
+
+        onView(withTagValue(is((Object) firstProductTag))).perform(scrollTo(), click());
+        onView(withId(R.id.shop_purchase_quantity)).check((view, error) ->
+                ((NumberPicker) view).setValue(3));
+        onView(withId(R.id.shop_purchase_total))
+                .check(matches(withText("Total: 150 Coins")));
+        onView(withId(R.id.shop_purchase_confirm)).perform(click());
+
+        String expressionKey = PetExpressionCatalog.PRODUCTS.get(0).itemKey;
+        assertEquals(3, store.expressionStock(expressionKey));
+        assertEquals(350, store.coins());
+        onView(withTagValue(is((Object) firstProductTag))).check(matches(isDisplayed()));
+        assertEquals(firstPosition, topOfTaggedView(firstProductTag));
+        assertEquals(secondPosition, topOfTaggedView(secondProductTag));
+
+        onView(withTagValue(is((Object) firstProductTag))).perform(scrollTo(), click());
+        onView(withId(R.id.shop_purchase_quantity)).check((view, error) ->
+                ((NumberPicker) view).setValue(2));
+        onView(withId(R.id.shop_purchase_confirm)).perform(click());
+        assertEquals(5, store.expressionStock(expressionKey));
+        assertEquals(250, store.coins());
+        assertEquals(firstPosition, topOfTaggedView(firstProductTag));
+        assertEquals(secondPosition, topOfTaggedView(secondProductTag));
         assertEquals(FocusStore.PurchaseResult.ALREADY_OWNED,
                 store.purchase("look_mint_star", "duplicate-look-purchase"));
         assertEquals(0, store.coins());
 
-        onView(withText("Back to collection")).perform(scrollTo(), click());
+        onView(withText("< Back to collection")).perform(scrollTo(), click());
         onView(withId(R.id.pet_eggs_chip)).perform(click());
-        onView(withId(R.id.hatch_button)).perform(scrollTo(), click());
+        hatchAndConfirm();
         onView(withId(R.id.hatch_name_input)).perform(typeText("Minty"));
         onView(withText("Continue")).perform(scrollTo(), click());
         onView(withText("Mint Star")).check(matches(isDisplayed()));
+    }
+
+    @Test public void shopProductsFlowIntoTheShorterMasonryColumn() {
+        resources(500, 0, 0);
+        launch();
+        onView(withText("Collection")).perform(click());
+        onView(withId(R.id.open_shop)).perform(click());
+        onView(withText("Expressions")).perform(click());
+
+        String firstProductTag = "buy_" + PetExpressionCatalog.PRODUCTS.get(0).id;
+        String secondProductTag = "buy_" + PetExpressionCatalog.PRODUCTS.get(1).id;
+        String thirdProductTag = "buy_" + PetExpressionCatalog.PRODUCTS.get(2).id;
+        int firstLeft = cardLeftOfTaggedView(firstProductTag);
+        int secondLeft = cardLeftOfTaggedView(secondProductTag);
+        assertTrue(firstLeft != secondLeft);
+
+        int firstBottom = cardTopOfTaggedView(firstProductTag)
+                + parentHeightOfTaggedView(firstProductTag);
+        int secondBottom = cardTopOfTaggedView(secondProductTag)
+                + parentHeightOfTaggedView(secondProductTag);
+        int shorterColumnLeft = firstBottom <= secondBottom ? firstLeft : secondLeft;
+        assertEquals(shorterColumnLeft, cardLeftOfTaggedView(thirdProductTag));
+        assertTrue(cardTopOfTaggedView(thirdProductTag) >= Math.min(firstBottom, secondBottom));
+    }
+
+    @Test public void petDescriptionIsHiddenWhileHatchedDetailsRemain() {
+        launch();
+        onView(withText("Collection")).perform(click());
+        onView(withId(R.id.pet_card)).perform(scrollTo(), click());
+
+        onView(withText("A newly hatched pet waiting to grow.")).check(doesNotExist());
+        onView(withId(R.id.pet_detail_hatched_info))
+                .check(matches(withText(containsString("Hatched:"))));
+        onView(withId(R.id.open_customize)).perform(scrollTo(), click());
+        onView(withText("< Back to pet")).check(matches(isDisplayed()));
     }
 
     @Test public void invalidHatchNamesKeepTheFlowAtTheNameStep() {
         resources(0, 100, 1);
         launch();
         hatchScreen();
-        onView(withId(R.id.hatch_button)).perform(scrollTo(), click());
+        hatchAndConfirm();
         onView(withId(R.id.hatch_name_input)).perform(typeText("   "));
         onView(withText("Continue")).perform(scrollTo(), click());
         onView(withId(R.id.hatch_name_input)).check(matches(hasErrorText("Enter a name for your pet")));
@@ -286,7 +482,19 @@ public class PetFeaturesRegressionTest {
     }
     @Test public void interactionsPersistClampAndThrottle(){Pet p=repo.ensureStarterPet();long at=System.currentTimeMillis();assertEquals(FocusRepository.InteractionResult.UPDATED,repo.interact(p.id,PetInteraction.Action.PLAY,at));assertEquals(95,repo.pet(p.id).energy);assertEquals(100,repo.pet(p.id).mood);assertEquals(FocusRepository.InteractionResult.COOLDOWN,repo.interact(p.id,PetInteraction.Action.PET,at+1));assertEquals(FocusRepository.InteractionResult.UPDATED,repo.interact(p.id,PetInteraction.Action.REST,at+10000));assertEquals(100,new FocusRepository(c).pet(p.id).energy);db.petDao().updateInteraction(p.id,40,4,0);assertEquals(FocusRepository.InteractionResult.LOW_ENERGY,repo.interact(p.id,PetInteraction.Action.PLAY,at+20000));assertEquals(4,repo.pet(p.id).energy);assertEquals(0,store.coins());assertEquals(0,store.experience());}
     @Test public void hatchButtonDisabledGrayAndEnabledAtExactCost(){resources(0,100,0);launch();hatchScreen();onView(withId(R.id.hatch_button)).check(matches(not(isEnabled())));resources(0,99,1);onView(withId(R.id.hatching_back)).perform(scrollTo(),click());onView(withId(R.id.pet_eggs_chip)).perform(click());onView(withId(R.id.hatch_button)).check(matches(not(isEnabled())));Button b=(Button)view(R.id.hatch_button);assertEquals(Color.rgb(105,105,105),b.getCurrentTextColor());assertEquals(Color.rgb(218,218,218),b.getBackgroundTintList().getDefaultColor());resources(0,100,1);onView(withId(R.id.hatching_back)).perform(scrollTo(),click());onView(withId(R.id.pet_eggs_chip)).perform(click());onView(withId(R.id.hatch_button)).check(matches(isEnabled()));}
-    @Test public void shopShowsOnlyPetLooksAndCoinBalance() {
+    @Test public void cancellingHatchConfirmationDoesNotStartDraftOrSpendResources() {
+        resources(0, 100, 1);
+        launch();
+        hatchScreen();
+        onView(withId(R.id.hatch_button)).perform(scrollTo(), click());
+        onView(withText(R.string.hatch_confirmation_title)).check(matches(isDisplayed()));
+        onView(withText(android.R.string.cancel)).perform(click());
+        assertNull(repo.activeHatchDraft());
+        assertEquals(1, store.petEggs());
+        assertEquals(100, store.lifeEssence());
+        onView(withId(R.id.hatch_button)).check(matches(isDisplayed()));
+    }
+    @Test public void shopShowsCategoriesAndCoinBalance() {
         resources(100, 200, 0);
         launch();
         onView(withText("Collection")).perform(click());
@@ -294,7 +502,7 @@ public class PetFeaturesRegressionTest {
         onView(withId(R.id.shop_balance)).check(matches(withText("Coins: 100")));
         onView(withId(R.id.shop_balance_icon)).check(matches(isDisplayed()));
         onView(withText("Essence: 200")).check(doesNotExist());
-        onView(withText("Accessories")).check(doesNotExist());
+        onView(withText("Accessories")).check(matches(isDisplayed()));
         onView(withText("Clothing")).check(doesNotExist());
         onView(withText("Decorations")).check(doesNotExist());
         onView(withText("A soft, winged pet look.")).check(doesNotExist());
@@ -315,7 +523,9 @@ public class PetFeaturesRegressionTest {
         assertTrue(store.ownedPetLookKeys().isEmpty());
     }
     @Test public void petDetailHasWorkingInteractions(){launch();onView(withText("Collection")).perform(click());onView(withId(R.id.pet_card)).perform(scrollTo(),click());onView(withId(R.id.pet_interaction_play)).perform(scrollTo(),click());onView(withId(R.id.pet_interaction_feedback)).perform(scrollTo()).check(matches(withText(containsString("enjoyed playing"))));assertEquals(95,repo.selectedPet().energy);onView(withId(R.id.pet_interaction_rest)).perform(scrollTo(),click());onView(withId(R.id.pet_interaction_feedback)).perform(scrollTo()).check(matches(withText(containsString("wait"))));}
-    @Test public void focusAnimationUsesSelectedPetAndEndingNeedsOneConfirmation(){Pet p=repo.ensureStarterPet();Pet second=addPet("Second");repo.selectPet(second.id);launch();onView(withText("Start focus")).perform(scrollTo(),click());onView(withText("Begin session")).perform(scrollTo(),click());SystemClock.sleep(1200);assertEquals(second.id,((Long)view(R.id.pet_animation_container).getTag()).longValue());assertEquals(second.imageKey,view(R.id.pet_animation_image).getTag());long id=store.activeSessionId();store.saveActiveSessionState(SystemClock.elapsedRealtime()+20*60000L,25,false,20*60000L);c.startService(new Intent(c,FocusService.class).setAction(FocusService.ACTION_RESTORE));SystemClock.sleep(300);onView(withText("End session")).perform(scrollTo(),click());onView(withText("Yes, end session")).perform(click());SystemClock.sleep(300);assertFalse(store.hasActiveSession());assertEquals(FocusSession.STATUS_COMPLETED,repo.pendingSession(id).status);assertEquals(5,repo.pendingSession(id).actualMinutes);onView(withText("Continue to claim")).perform(scrollTo()).check(matches(isDisplayed()));}
+    @Test public void focusAnimationUsesSelectedPetAndFiveMinuteEarlyEndKeepsPartialRewards(){Pet p=repo.ensureStarterPet();Pet second=addPet("Second");repo.selectPet(second.id);launch();onView(withText("Start focus")).perform(scrollTo(),click());onView(withText("Begin session")).perform(scrollTo(),click());SystemClock.sleep(1200);assertEquals(second.id,((Long)view(R.id.pet_animation_container).getTag()).longValue());assertEquals(second.imageKey,view(R.id.pet_animation_image).getTag());long id=store.activeSessionId();store.saveActiveSessionState(SystemClock.elapsedRealtime()+20*60000L,25,false,20*60000L);c.startService(new Intent(c,FocusService.class).setAction(FocusService.ACTION_RESTORE));SystemClock.sleep(300);onView(withText("End session")).perform(scrollTo(),click());onView(withText("Yes, end session")).perform(click());SystemClock.sleep(300);assertFalse(store.hasActiveSession());FocusSession session=repo.pendingSession(id);assertEquals(FocusSession.STATUS_COMPLETED,session.status);assertEquals(5,session.actualMinutes);assertEquals(1,session.xpReward);assertTrue(repo.hasClaimableRewards(session));assertEquals(5,store.todayMinutes());onView(withText("Continue to claim")).perform(scrollTo()).check(matches(isDisplayed()));}
+
+    @Test public void earlyEndOverFiveMinutesGetsMinimumRewardsAndCreditsActualTime(){repo.ensureStarterPet();long id=repo.startSession(25,"Six minutes");repo.completeEarlySession(id,6);FocusSession session=repo.pendingSession(id);assertEquals(FocusSession.STATUS_COMPLETED,session.status);assertEquals(6,session.actualMinutes);assertEquals(1,session.xpReward);assertTrue(session.coinReward>=1);assertTrue(session.essenceReward>=1);assertFalse(session.eggReward);store.refreshCalendarProgress(repo.history());store.refreshCalendarProgress(repo.history());assertEquals(6,store.todayMinutes());}
     @Test public void resetClearsPurchasesEquipmentAndResources(){resources(25,0,0);Pet p=repo.ensureStarterPet();store.purchase("collar","c");repo.equipCosmetic(p.id,"collar");repo.clearAllData();assertTrue(store.ownedCosmeticIds().isEmpty());assertNull(store.equippedItemId(p.id,"accessory"));assertEquals(0,store.coins());assertTrue(repo.pets().isEmpty());}
 
     @Test public void hatchWithFocusDroppedEggChargesExplicitCosts(){repo.ensureStarterPet();resources(17,100,1);assertEquals(FocusStore.PurchaseResult.INVALID_PRODUCT,store.purchase("egg","no-egg-sale"));HatchDraft draft=repo.startHatchDraft();repo.advanceHatchName(draft.id,"Focus");repo.advanceHatchAppearance(draft.id);assertNotNull(repo.confirmHatch(draft.id));assertEquals(0,store.lifeEssence());assertEquals(0,store.petEggs());assertEquals(17,store.coins());assertEquals(2,repo.pets().size());}

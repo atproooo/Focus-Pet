@@ -10,7 +10,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase;
 import androidx.annotation.NonNull;
 
 @Database(entities = {FocusSession.class, Pet.class, HatchDraft.class, ShopProductEntity.class},
-        version = 7, exportSchema = false)
+        version = 8, exportSchema = false)
 public abstract class FocusDatabase extends RoomDatabase {
     public abstract FocusSessionDao focusSessionDao();
     public abstract PetDao petDao();
@@ -53,6 +53,17 @@ public abstract class FocusDatabase extends RoomDatabase {
                     + "PRIMARY KEY(id))");
         }
     };
+    static final Migration MIGRATION_7_8 = new Migration(7, 8) {
+        @Override public void migrate(@NonNull SupportSQLiteDatabase db) {
+            db.execSQL("ALTER TABLE focus_sessions ADD COLUMN petId INTEGER NOT NULL DEFAULT 0");
+            db.execSQL("ALTER TABLE focus_sessions ADD COLUMN petName TEXT");
+            db.execSQL("ALTER TABLE focus_sessions ADD COLUMN petSpecies TEXT");
+            db.execSQL("ALTER TABLE focus_sessions ADD COLUMN petImageKey TEXT");
+            db.execSQL("ALTER TABLE focus_sessions ADD COLUMN petAppearanceData TEXT");
+            db.execSQL("ALTER TABLE focus_sessions ADD COLUMN accessoryKey TEXT");
+            db.execSQL("ALTER TABLE focus_sessions ADD COLUMN backgroundKey TEXT NOT NULL DEFAULT 'plain'");
+        }
+    };
 
     public static FocusDatabase getInstance(Context context) {
         if (instance == null) {
@@ -60,7 +71,8 @@ public abstract class FocusDatabase extends RoomDatabase {
                 if (instance == null) {
                     instance = Room.databaseBuilder(context.getApplicationContext(),
                             FocusDatabase.class, "focuspet.db")
-                            .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+                            .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7,
+                                    MIGRATION_7_8)
                             .build();
                 }
             }

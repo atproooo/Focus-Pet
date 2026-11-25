@@ -63,5 +63,24 @@
     <string name="expression_inventory_button">Expression inventory</string>
     <string name="expression_shop_button">Browse expression shop</string>
     <string name="accessories_button">Accessories</string>
-    <string name="appearance_fixed_message">Base appearance is set during hatching.</string>
+    <string name="accessories_wearing">Wearing: %1$s</string>
+    <string name="accessories_empty">You do not own any accessories yet.</string>
+    <string name="accessories_shop">Shop accessories</string>
+    <string name="accessory_equip">Equip</string>
+    <string name="accessory_remove">Remove</string>
+    <string name="accessories_customize_intro">Choose one accessory for this pet. Equipping another replaces the current one.</string>
+    <string name="customize_tab_accessories">Accessories</string>
+    <string name="customize_tab_expressions">Expressions</string>
+    <string name="customize_tab_background">Background</string>
+    <string name="customize_background_intro">Choose a background for this pet. Unlocked backgrounds can be shared by all your pets.</string>
+    <string name="backgrounds_shop">Shop backgrounds</string>
+    <string name="background_use">Use</string>
+    <string name="background_equipped">Equipped</string>
+    <string name="hatch_confirmation_title">Are you sure you want to hatch an egg?</string>
+    <string name="hatch_confirmation_message">You will choose a name and appearance next. Your Pet Egg and 100 Life Essence are only spent when you confirm the hatch.</string>
+    <string name="hatch_confirmation_confirm">Hatch</string>
+    <string name="shop_unit_price">Unit price: %1$d %2$s</string>
+    <string name="shop_purchase_quantity">Quantity</string>
+    <string name="shop_purchase_total">Total: %1$d %2$s</string>
+    <string name="shop_purchase_success_quantity">Purchased %1$d × %2$s.</string>
 </resources>

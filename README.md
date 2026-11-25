@@ -12,15 +12,17 @@ The current project is an Android MVP for a single local user. It does not requi
 - Finish and reward-claim flow with one-time claim protection.
 - Early-session rewards based on counted whole minutes, with reduced payout for ending early.
 - Randomized coins, Life Essence, and Pet Egg rewards.
-- Pet Egg customization flow requiring a name and appearance choice before preview and confirmation; one egg and 100 Life Essence are charged only on confirmation.
+- Pet Egg flow with an explicit confirmation before starting customization, then a name and appearance choice before final preview and confirmation; one egg and 100 Life Essence are charged only on final confirmation.
 - Persistent pets with names, species, rarity, level, experience, appearance data, hatch date, mood, energy, and selected companion state.
 - Companion selection from the home screen.
 - Collection screen with owned pets and resource inventory.
-- Shop with All, Pet Looks, and Expressions filters. Expression items stack in inventory and can be taught to individual pets.
+- Shop with All, Pet Looks, Expressions, Accessories, and Backgrounds filters. Expression items stack in inventory, support quantity-based repeat purchases, and can be taught to individual pets. Background products cost 50 Coins each, unlock globally, and can be equipped independently by each pet.
+- Accessories shop with ten transparent PNG items. Each pet can equip one accessory at a time; the same item may be equipped independently by different pets.
+- Pet detail interactions are separate from a unified Customize screen with Accessories, Expressions, and per-pet Background selection.
 - Pet detail and Customize screens with per-pet learned expressions, enable checkboxes, and random expression bubbles during focus and pet interactions.
 - Hatched pets keep their selected base appearance; owned accessories remain managed separately.
 - Pet detail screen with experience progress.
-- Statistics summary and clickable focus-history details.
+- Statistics summary and clickable focus-history details with the saved background illustration for each session.
 - Settings, notification permission handling, local reset, and debug-only resource controls.
 - XML-backed reusable pet cards and screen components, with some navigation/UI composition still handled by Java.
 
@@ -55,14 +57,14 @@ The original project plan mentioned Jetpack Compose, but the current implementat
 - [`FocusRepository.java`](app/src/main/java/com/example/focuspet/FocusRepository.java) - Coordinates Room sessions and pets, calculates randomized rewards, completes sessions, and atomically claims rewards.
 - [`FocusStore.java`](app/src/main/java/com/example/focuspet/FocusStore.java) - Stores lightweight account progress, resources, streak values, and active-session state in `SharedPreferences`.
 - [`ShopRepository.java`](app/src/main/java/com/example/focuspet/ShopRepository.java), [`ShopProductEntity.java`](app/src/main/java/com/example/focuspet/ShopProductEntity.java), and [`ShopProductDao.java`](app/src/main/java/com/example/focuspet/ShopProductDao.java) - Seeds and reads the Room-backed shop catalog.
-- [`ShopCatalog.java`](app/src/main/java/com/example/focuspet/ShopCatalog.java), [`PetLookCatalog.java`](app/src/main/java/com/example/focuspet/PetLookCatalog.java), [`PetExpressionCatalog.java`](app/src/main/java/com/example/focuspet/PetExpressionCatalog.java), and [`ShopCategory.java`](app/src/main/java/com/example/focuspet/ShopCategory.java) - Define products, appearance offers, expression items, and shop categories separately from persistence and UI.
+- [`ShopCatalog.java`](app/src/main/java/com/example/focuspet/ShopCatalog.java), [`PetLookCatalog.java`](app/src/main/java/com/example/focuspet/PetLookCatalog.java), [`PetExpressionCatalog.java`](app/src/main/java/com/example/focuspet/PetExpressionCatalog.java), [`BackgroundCatalog.java`](app/src/main/java/com/example/focuspet/BackgroundCatalog.java), and [`ShopCategory.java`](app/src/main/java/com/example/focuspet/ShopCategory.java) - Define products, appearance offers, expression items, backgrounds, and shop categories separately from persistence and UI.
 - [`PetLook.java`](app/src/main/java/com/example/focuspet/PetLook.java) - Maps pet appearance keys to localized labels and drawable resources.
 - [`PetExpression.java`](app/src/main/java/com/example/focuspet/PetExpression.java) and [`PetExpressionSelector.java`](app/src/main/java/com/example/focuspet/PetExpressionSelector.java) - Define built-in and learnable expressions and choose context-appropriate expressions for bubbles.
 
 ### Room data model
 
 - [`FocusDatabase.java`](app/src/main/java/com/example/focuspet/FocusDatabase.java) - Room database containing sessions and pets.
-- [`FocusSession.java`](app/src/main/java/com/example/focuspet/FocusSession.java) - Session entity, timing fields, status, early-ending state, and reward values.
+- [`FocusSession.java`](app/src/main/java/com/example/focuspet/FocusSession.java) - Session entity, timing fields, status, early-ending state, reward values, and the pet-visual snapshot used by history illustrations.
 - [`FocusSessionDao.java`](app/src/main/java/com/example/focuspet/FocusSessionDao.java) - Session lifecycle queries and atomic reward-claim update.
 - [`Pet.java`](app/src/main/java/com/example/focuspet/Pet.java) - Pet entity and level calculation.
 - [`PetDao.java`](app/src/main/java/com/example/focuspet/PetDao.java) - Pet listing, selection, insertion, and experience updates.
@@ -193,3 +195,5 @@ Purchases are persisted with duplicate-request protection. Hatching uses a resum
 ## Pet expression implementation update (2026-11-24)
 
 The shop offers eight A-H expression items for 50 Coins each. Items are repeatable and stack in `SharedPreferences`; teaching one to a pet consumes one item, records that expression for the pet, and enables it by default. Customize lists only that pet's learned expressions with per-expression Use checkboxes, while Expression inventory lists only positive stock and supports teaching directly to the current pet. Expression selection is shared by focus-session and pet-detail bubbles, with the existing ambient rate limits retained. Base appearance remains fixed after hatching; accessory equipment stays on a separate screen. No Room schema change or data reset is required.
+
+The Accessories category offers the ten `accessory_*.png` assets for 50 Coins each. Ownership is global, while the equipped accessory key is stored per pet in the existing `SharedPreferences` equipment entry; all accessories share one `accessory` slot, so equipping another replaces the current one. Static accessory definitions map each key to its drawable, front/back layer, and normalized position over the pet artwork. The renderer composes the accessory on the pet in collection, detail, session, wardrobe, and shop previews. No Room schema migration or app-data reset is required.

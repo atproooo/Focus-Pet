@@ -25,9 +25,12 @@ public class PetMigrationTest {
             old.setVersion(4);old.close();
             migrated=Room.databaseBuilder(c,FocusDatabase.class,name)
                     .addMigrations(FocusDatabase.MIGRATION_4_5, FocusDatabase.MIGRATION_5_6,
-                            FocusDatabase.MIGRATION_6_7).build();
+                            FocusDatabase.MIGRATION_6_7, FocusDatabase.MIGRATION_7_8).build();
             Pet pet=migrated.petDao().byId(7);assertNotNull(pet);assertEquals("Legacy",pet.name);assertEquals(80,pet.experience);assertEquals(70,pet.mood);assertTrue(pet.selected);assertNull(pet.hatchRequestId);assertEquals(0,pet.lastInteractionAt);
-            assertEquals("Legacy session",migrated.focusSessionDao().findById(9).label);
+            FocusSession legacySession=migrated.focusSessionDao().findById(9);
+            assertEquals("Legacy session",legacySession.label);
+            assertEquals(BackgroundCatalog.DEFAULT_KEY,legacySession.backgroundKey);
+            assertEquals(0,legacySession.petId);
             assertNull(migrated.hatchDraftDao().active());
             assertTrue(migrated.shopProductDao().availableProducts().isEmpty());
             migrated.petDao().updateInteraction(7,75,55,100);assertEquals(100,migrated.petDao().byId(7).lastInteractionAt);

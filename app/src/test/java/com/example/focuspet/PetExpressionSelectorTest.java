@@ -43,4 +43,12 @@ public class PetExpressionSelectorTest {
             assertEquals(expression, selected);
         }
     }
+
+    @Test
+    public void tapExpressionUsesTwentyPercentThreshold() {
+        assertEquals(true, PetInteraction.shouldShowTapExpression(0f));
+        assertEquals(true, PetInteraction.shouldShowTapExpression(0.199f));
+        assertEquals(false, PetInteraction.shouldShowTapExpression(0.2f));
+        assertEquals(false, PetInteraction.shouldShowTapExpression(0.999f));
+    }
 }

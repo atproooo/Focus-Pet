@@ -4,8 +4,16 @@
     <item type="id" name="open_wardrobe" />
     <item type="id" name="open_customize" />
     <item type="id" name="open_expression_inventory" />
+    <item type="id" name="customize_tab_accessories" />
+    <item type="id" name="customize_tab_expressions" />
+    <item type="id" name="customize_tab_background" />
+    <item type="id" name="shop_purchase_quantity" />
+    <item type="id" name="shop_purchase_total" />
+    <item type="id" name="shop_purchase_confirm" />
     <item type="id" name="shop_balance" />
     <item type="id" name="shop_balance_icon" />
+    <item type="id" name="coins_chip" />
+    <item type="id" name="essence_chip" />
     <item type="id" name="pet_interaction_feedback" />
     <item type="id" name="pet_interaction_pet" />
     <item type="id" name="pet_interaction_play" />

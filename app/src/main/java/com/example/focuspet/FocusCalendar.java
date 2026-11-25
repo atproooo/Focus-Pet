@@ -6,7 +6,7 @@ import java.time.ZoneId;
 import java.util.List;
 import java.util.TreeSet;
 
-/** Calendar statistics use completed, claimed sessions and their credited (discounted) XP. */
+/** Daily goal minutes use actual time; streaks continue to use claimed sessions. */
 final class FocusCalendar {
     static final class Summary {
         int todayMinutes;
@@ -19,13 +19,18 @@ final class FocusCalendar {
         Summary result = new Summary();
         TreeSet<LocalDate> days = new TreeSet<>();
         for (FocusSession session : sessions) {
-            if (!FocusSession.STATUS_CLAIMED.equals(session.status)) continue;
+            boolean claimed = FocusSession.STATUS_CLAIMED.equals(session.status);
+            boolean finished = claimed
+                    || FocusSession.STATUS_COMPLETED.equals(session.status)
+                    || FocusSession.STATUS_COMPLETED_NO_REWARD.equals(session.status)
+                    || FocusSession.STATUS_CANCELLED.equals(session.status);
+            if (!finished) continue;
             long timestamp = session.endedAt > 0 ? session.endedAt : session.startedAt;
             if (timestamp <= 0) continue;
             LocalDate day = Instant.ofEpochMilli(timestamp).atZone(zone).toLocalDate();
             if (day.isAfter(today)) continue;
-            days.add(day);
-            if (today.equals(day)) result.todayMinutes += session.xpReward;
+            if (claimed) days.add(day);
+            if (today.equals(day)) result.todayMinutes += Math.max(0, session.actualMinutes);
         }
         LocalDate previous = null;
         int run = 0;

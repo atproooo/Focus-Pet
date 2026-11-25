@@ -13,6 +13,7 @@ import java.util.Set;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 public class ExpressionInventoryTest {
@@ -20,19 +21,44 @@ public class ExpressionInventoryTest {
     public void purchasesStackAndDuplicateReceiptsDoNotGrantTwice() {
         TestPreferences preferences = new TestPreferences();
         FocusStore store = new FocusStore(preferences, Clock.systemUTC());
-        store.addDebugResources(200, 0, 0);
+        store.addDebugResources(500, 0, 0);
         com.example.focuspet.model.FocusPetModels.ShopProduct product =
                 PetExpressionCatalog.PRODUCTS.get(0);
 
         assertEquals(FocusStore.PurchaseResult.PURCHASED,
-                store.purchase(product, "purchase-one"));
+                store.purchase(product, 3, "purchase-three"));
         assertEquals(FocusStore.PurchaseResult.PURCHASED,
-                store.purchase(product, "purchase-two"));
+                store.purchase(product, 3, "purchase-three"));
+        assertEquals(FocusStore.PurchaseResult.INVALID_REQUEST,
+                store.purchase(product, 2, "purchase-three"));
         assertEquals(FocusStore.PurchaseResult.PURCHASED,
-                store.purchase(product, "purchase-two"));
+                store.purchase(product, 2, "purchase-two"));
 
-        assertEquals(2, store.expressionStock(product.itemKey));
+        assertEquals(5, store.expressionStock(product.itemKey));
+        assertEquals(250, store.coins());
+    }
+
+    @Test
+    public void expressionPurchaseRejectsInvalidCountInsufficientFundsAndInventoryOverflow() {
+        TestPreferences preferences = new TestPreferences();
+        FocusStore store = new FocusStore(preferences, Clock.systemUTC());
+        store.addDebugResources(100, 0, 0);
+        com.example.focuspet.model.FocusPetModels.ShopProduct product =
+                PetExpressionCatalog.PRODUCTS.get(0);
+
+        assertEquals(FocusStore.PurchaseResult.INVALID_REQUEST,
+                store.purchase(product, 0, "zero"));
+        assertEquals(FocusStore.PurchaseResult.INSUFFICIENT_RESOURCES,
+                store.purchase(product, 3, "too-many"));
         assertEquals(100, store.coins());
+        assertEquals(0, store.expressionStock(product.itemKey));
+
+        preferences.edit().putInt("expression_stock_" + product.itemKey,
+                Integer.MAX_VALUE - 1).commit();
+        assertEquals(FocusStore.PurchaseResult.INVALID_REQUEST,
+                store.purchase(product, 2, "overflow"));
+        assertEquals(100, store.coins());
+        assertEquals(Integer.MAX_VALUE - 1, store.expressionStock(product.itemKey));
     }
 
     @Test
@@ -63,6 +89,60 @@ public class ExpressionInventoryTest {
         assertEquals(0, store.expressionStock(product.itemKey));
         assertTrue(store.enabledPetExpressions(8).contains(product.itemKey));
         assertFalse(store.enabledPetExpressions(7).contains(product.itemKey));
+    }
+
+    @Test
+    public void accessoriesAreOwnedGloballyAndOnePerPetEquipmentReplacesThePreviousItem() {
+        TestPreferences preferences = new TestPreferences();
+        FocusStore store = new FocusStore(preferences, Clock.systemUTC());
+        store.addDebugResources(100, 0, 0);
+        com.example.focuspet.model.FocusPetModels.ShopProduct first =
+                AccessoryCatalog.PRODUCTS.get(0);
+        com.example.focuspet.model.FocusPetModels.ShopProduct second =
+                AccessoryCatalog.PRODUCTS.get(1);
+
+        assertEquals(FocusStore.PurchaseResult.PURCHASED,
+                store.purchase(first, "accessory-purchase-one"));
+        assertEquals(FocusStore.PurchaseResult.ALREADY_OWNED,
+                store.purchase(first, "accessory-purchase-duplicate"));
+        assertEquals(FocusStore.PurchaseResult.PURCHASED,
+                store.purchase(second, "accessory-purchase-two"));
+        assertTrue(store.ownedCosmeticIds().contains(first.itemKey));
+
+        assertTrue(store.equip(7, first.itemKey));
+        assertTrue(store.equip(7, second.itemKey));
+        assertEquals(second.itemKey, store.equippedAccessoryId(7));
+        assertNull(store.equippedAccessoryId(8));
+
+        store.unequip(7, "accessory");
+        assertNull(store.equippedAccessoryId(7));
+    }
+
+    @Test
+    public void backgroundsAreGloballyUnlockedAndEquippedIndependentlyPerPet() {
+        TestPreferences preferences = new TestPreferences();
+        FocusStore store = new FocusStore(preferences, Clock.systemUTC());
+        store.addDebugResources(200, 0, 0);
+        com.example.focuspet.model.FocusPetModels.ShopProduct first =
+                BackgroundCatalog.PRODUCTS.get(0);
+        com.example.focuspet.model.FocusPetModels.ShopProduct second =
+                BackgroundCatalog.PRODUCTS.get(1);
+
+        assertTrue(store.ownedBackgroundKeys().contains(BackgroundCatalog.DEFAULT_KEY));
+        assertFalse(store.setPetBackground(7, first.itemKey));
+        assertEquals(FocusStore.PurchaseResult.PURCHASED,
+                store.purchase(first, "background-purchase-one"));
+        assertEquals(FocusStore.PurchaseResult.ALREADY_OWNED,
+                store.purchase(first, "background-purchase-duplicate"));
+        assertEquals(FocusStore.PurchaseResult.PURCHASED,
+                store.purchase(second, "background-purchase-two"));
+
+        assertTrue(store.setPetBackground(7, first.itemKey));
+        assertTrue(store.setPetBackground(8, second.itemKey));
+        assertEquals(first.itemKey, store.petBackgroundKey(7));
+        assertEquals(second.itemKey, store.petBackgroundKey(8));
+        assertEquals(BackgroundCatalog.DEFAULT_KEY, store.petBackgroundKey(9));
+        assertEquals(100, store.coins());
     }
 
     private static final class TestPreferences implements SharedPreferences {

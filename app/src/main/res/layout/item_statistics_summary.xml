@@ -29,7 +29,7 @@
         </LinearLayout>
     </LinearLayout>
 
-    <View android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginTop="14dp" android:layout_marginBottom="14dp" android:background="@color/background_accent" />
+    <View android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginTop="14dp" android:layout_marginBottom="14dp" android:background="@color/text_secondary" />
 
     <LinearLayout
         android:layout_width="match_parent"

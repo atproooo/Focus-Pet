@@ -29,7 +29,7 @@ public final class FocusRepository {
         progress = new FocusStore(context);
         if (progress.needsCalendarInitialization()) {
             run(() -> {
-                progress.initializeCalendarProgress(sessions.claimedHistory());
+                progress.initializeCalendarProgress(sessions.history());
                 return null;
             });
         }
@@ -57,6 +57,16 @@ public final class FocusRepository {
                 session.label = label == null ? "" : label;
                 session.status = FocusSession.STATUS_RUNNING;
                 session.rewardGranted = false;
+                Pet companion = pets.selected();
+                if (companion != null) {
+                    session.petId = companion.id;
+                    session.petName = companion.name;
+                    session.petSpecies = companion.species;
+                    session.petImageKey = companion.imageKey;
+                    session.petAppearanceData = companion.appearanceData;
+                    session.accessoryKey = progress.equippedAccessoryId(companion.id);
+                    session.backgroundKey = progress.petBackgroundKey(companion.id);
+                }
                 return sessions.insert(session);
             });
             return result.get();
@@ -78,6 +88,13 @@ public final class FocusRepository {
         run(() -> {
             FocusSession session = sessions.findById(id);
             if (session == null || !FocusSession.STATUS_RUNNING.equals(session.status)) return null;
+            long endedAt = System.currentTimeMillis();
+            if (actualMinutes < 5) {
+                sessions.finish(id, FocusSession.STATUS_COMPLETED_NO_REWARD, endedAt,
+                        actualMinutes, 0, 0, 0, false, endedEarly);
+                progress.refreshCalendarProgress(sessions.history());
+                return null;
+            }
             int baseEssence = Math.max(1, Math.min(5, (int) (actualMinutes * 0.08f)));
             int essence = Math.max(1, Math.min(5, baseEssence + random.nextInt(3) - 1));
             int coins = actualMinutes + random.nextInt(4);
@@ -85,18 +102,28 @@ public final class FocusRepository {
             int streak = progress.streak();
             int eggChance = Math.min(100, eggChance(actualMinutes) + Math.min(3, streak / 4));
             if (endedEarly) {
-                xp = (int) (xp * 0.30f);
-                essence = (int) (essence * 0.30f);
-                coins = (int) (coins * 0.30f);
-                eggChance = (int) (eggChance * 0.30f);
+                xp = earlyReward(xp);
+                essence = earlyReward(essence);
+                coins = earlyReward(coins);
             }
             int misses = progress.eggMisses() + 1;
             boolean egg = !endedEarly && (misses >= 10 || random.nextInt(100) < eggChance);
+            if (!hasClaimableRewards(xp, coins, essence, egg)) {
+                sessions.cancel(id, FocusSession.STATUS_CANCELLED,
+                        System.currentTimeMillis(), actualMinutes);
+                progress.refreshCalendarProgress(sessions.history());
+                return null;
+            }
             progress.setEggMisses(egg ? 0 : misses);
-            sessions.finish(id, FocusSession.STATUS_COMPLETED, System.currentTimeMillis(), actualMinutes,
+            sessions.finish(id, FocusSession.STATUS_COMPLETED, endedAt, actualMinutes,
                     xp, coins, essence, egg, endedEarly);
+            progress.refreshCalendarProgress(sessions.history());
             return null;
         });
+    }
+
+    private int earlyReward(int baseReward) {
+        return Math.max(1, baseReward * 30 / 100);
     }
 
     private final java.util.Random random = new java.util.Random();
@@ -116,9 +143,10 @@ public final class FocusRepository {
         return run(() -> {
             FocusSession session = sessions.findById(id);
             if (session == null || !FocusSession.STATUS_COMPLETED.equals(session.status)
+                    || !hasClaimableRewards(session)
                     || sessions.claim(id) != 1) return false;
             progress.addClaimedRewards(session.xpReward, session.coinReward,
-                    session.essenceReward, session.eggReward, sessions.claimedHistory());
+                    session.essenceReward, session.eggReward, sessions.history());
             Pet selected = pets.selected();
             if (selected != null && session.xpReward > 0) {
                 pets.addExperience(selected.id, session.xpReward);
@@ -131,6 +159,7 @@ public final class FocusRepository {
         if (id > 0) {
             run(() -> {
                 sessions.cancel(id, FocusSession.STATUS_CANCELLED, System.currentTimeMillis(), actualMinutes);
+                progress.refreshCalendarProgress(sessions.history());
                 return null;
             });
         }
@@ -153,7 +182,22 @@ public final class FocusRepository {
     }
 
     public FocusSession latestPending() {
-        return run(sessions::latestPending);
+        return run(() -> {
+            while (true) {
+                FocusSession session = sessions.latestPending();
+                if (session == null || hasClaimableRewards(session)) return session;
+                if (sessions.cancelEmptyPending(session.id) == 0) return null;
+            }
+        });
+    }
+
+    public boolean hasClaimableRewards(FocusSession session) {
+        return session != null && hasClaimableRewards(session.xpReward, session.coinReward,
+                session.essenceReward, session.eggReward);
+    }
+
+    private boolean hasClaimableRewards(int xp, int coins, int essence, boolean egg) {
+        return xp > 0 || coins > 0 || essence > 0 || egg;
     }
 
     public List<Pet> pets() {

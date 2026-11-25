@@ -37,12 +37,17 @@ public final class ShopRepository {
     }
 
     public FocusStore.PurchaseResult purchase(String productId, String requestId) {
+        return purchase(productId, 1, requestId);
+    }
+
+    public FocusStore.PurchaseResult purchase(String productId, int purchaseCount,
+                                              String requestId) {
         return run(() -> {
             ShopProductEntity product = products.byId(productId);
             if (product == null || !product.available) {
                 return FocusStore.PurchaseResult.INVALID_PRODUCT;
             }
-            return store.purchase(product.toProduct(), requestId);
+            return store.purchase(product.toProduct(), purchaseCount, requestId);
         });
     }
 
@@ -51,6 +56,8 @@ public final class ShopRepository {
             List<ShopProduct> catalog = new ArrayList<>(ShopCatalog.PRODUCTS);
             catalog.addAll(PetLookCatalog.PRODUCTS);
             catalog.addAll(PetExpressionCatalog.PRODUCTS);
+            catalog.addAll(AccessoryCatalog.PRODUCTS);
+            catalog.addAll(BackgroundCatalog.PRODUCTS);
             database.runInTransaction(() -> {
                 for (int i = 0; i < catalog.size(); i++) {
                     products.upsert(ShopProductEntity.from(catalog.get(i), i));

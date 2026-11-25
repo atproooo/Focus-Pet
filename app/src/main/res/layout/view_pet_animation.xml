@@ -6,23 +6,47 @@
     android:layout_marginTop="16dp"
     android:clipChildren="false"
     android:clipToPadding="false">
-    <FrameLayout
-        android:id="@+id/pet_artwork_layer"
+    <ImageView
+        android:id="@+id/pet_background_image"
         android:layout_width="match_parent"
-        android:layout_height="match_parent">
-        <ImageView
-            android:id="@+id/pet_animation_image"
+        android:layout_height="match_parent"
+        android:contentDescription="@null"
+        android:importantForAccessibility="no"
+        android:scaleType="centerCrop" />
+    <FrameLayout
+        android:id="@+id/pet_artwork_scale_layer"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:clipChildren="false"
+        android:clipToPadding="false">
+        <FrameLayout
+            android:id="@+id/pet_artwork_layer"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:importantForAccessibility="no"
-            android:scaleType="fitCenter"
-            android:visibility="gone" />
-        <TextView
-            android:id="@+id/pet_animation_placeholder"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:gravity="center"
-            android:textColor="@color/text_secondary" />
+            android:clipChildren="false"
+            android:clipToPadding="false">
+            <com.example.focuspet.PetAccessoryLayer
+                android:id="@+id/pet_accessory_back_layer"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+            <ImageView
+                android:id="@+id/pet_animation_image"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:importantForAccessibility="no"
+                android:scaleType="fitCenter"
+                android:visibility="gone" />
+            <TextView
+                android:id="@+id/pet_animation_placeholder"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:gravity="center"
+                android:textColor="@color/text_secondary" />
+            <com.example.focuspet.PetAccessoryLayer
+                android:id="@+id/pet_accessory_front_layer"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+        </FrameLayout>
     </FrameLayout>
     <FrameLayout
         android:id="@+id/pet_expression_bubble"

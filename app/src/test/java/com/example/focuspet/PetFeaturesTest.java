@@ -12,7 +12,9 @@ public class PetFeaturesTest {
         List<ShopProduct> products=new ArrayList<>(ShopCatalog.PRODUCTS);
         products.addAll(PetLookCatalog.PRODUCTS);
         products.addAll(PetExpressionCatalog.PRODUCTS);
-        for(ShopProduct p:products){assertTrue(ids.add(p.id));assertEquals(p.productType==ProductType.PET_EGG?Currency.ESSENCE:Currency.COINS,p.currency);if(p.productType==ProductType.COSMETIC)assertNotNull(ShopCatalog.cosmetic(p.itemKey));}
+        products.addAll(AccessoryCatalog.PRODUCTS);
+        products.addAll(BackgroundCatalog.PRODUCTS);
+        for(ShopProduct p:products){assertTrue(ids.add(p.id));assertEquals(p.productType==ProductType.PET_EGG?Currency.ESSENCE:Currency.COINS,p.currency);if(p.productType==ProductType.COSMETIC)assertTrue(ShopCatalog.cosmetic(p.itemKey)!=null||AccessoryCatalog.fromKey(p.itemKey)!=null);}
         assertEquals(7, PetLookCatalog.PRODUCTS.size());
         for(ShopProduct product:PetLookCatalog.PRODUCTS){assertEquals(ProductType.PET_LOOK,product.productType);assertEquals("pet_looks",product.categoryKey);assertEquals(67,product.price);assertNotNull(PetLook.fromKey(product.itemKey));}
         assertEquals(8, PetExpressionCatalog.PRODUCTS.size());
@@ -24,11 +26,26 @@ public class PetFeaturesTest {
             assertNotNull(expression);
             assertTrue(expression.learnable);
         }
+        assertEquals(10, AccessoryCatalog.PRODUCTS.size());
+        for (ShopProduct product : AccessoryCatalog.PRODUCTS) {
+            assertEquals(ProductType.COSMETIC, product.productType);
+            assertEquals("accessories", product.categoryKey);
+            assertEquals(AccessoryCatalog.ACCESSORY_PRICE, product.price);
+            assertNotNull(AccessoryCatalog.fromKey(product.itemKey));
+        }
+        assertEquals(14, BackgroundCatalog.PRODUCTS.size());
+        for (ShopProduct product : BackgroundCatalog.PRODUCTS) {
+            assertEquals(ProductType.PET_BACKGROUND, product.productType);
+            assertEquals("backgrounds", product.categoryKey);
+            assertEquals(BackgroundCatalog.BACKGROUND_PRICE, product.price);
+            assertNotNull(BackgroundCatalog.fromKey(product.itemKey));
+        }
         assertNull("Pet Eggs are focus-drop only and must not be sold", ShopCatalog.product("egg"));
     }
     @Test public void shopCategoriesIncludePetLooksAndExpressions() {
         assertArrayEquals(new ShopCategory[]{ShopCategory.ALL, ShopCategory.PET_LOOKS,
-                        ShopCategory.EXPRESSIONS},
+                        ShopCategory.EXPRESSIONS, ShopCategory.ACCESSORIES,
+                        ShopCategory.BACKGROUNDS},
                 ShopCategory.values());
         for (ShopProduct product : ShopCatalog.PRODUCTS) {
             assertFalse(ShopCategory.ALL.includes(ShopProductEntity.from(product, 0)));
@@ -44,6 +61,18 @@ public class PetFeaturesTest {
             assertTrue(ShopCategory.ALL.includes(entity));
             assertTrue(ShopCategory.EXPRESSIONS.includes(entity));
             assertFalse(ShopCategory.PET_LOOKS.includes(entity));
+        }
+        for (ShopProduct product : AccessoryCatalog.PRODUCTS) {
+            ShopProductEntity entity = ShopProductEntity.from(product, 0);
+            assertTrue(ShopCategory.ALL.includes(entity));
+            assertTrue(ShopCategory.ACCESSORIES.includes(entity));
+            assertFalse(ShopCategory.EXPRESSIONS.includes(entity));
+        }
+        for (ShopProduct product : BackgroundCatalog.PRODUCTS) {
+            ShopProductEntity entity = ShopProductEntity.from(product, 0);
+            assertTrue(ShopCategory.ALL.includes(entity));
+            assertTrue(ShopCategory.BACKGROUNDS.includes(entity));
+            assertFalse(ShopCategory.ACCESSORIES.includes(entity));
         }
     }
     @Test public void interactionsAreBoundedAndRestoresEnergy() {

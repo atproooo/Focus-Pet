@@ -4,23 +4,6 @@
     android:layout_height="wrap_content"
     android:orientation="vertical">
 
-    <TextView
-        android:id="@+id/pet_detail_back"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:background="@drawable/bg_focuspet_back"
-        android:clickable="true"
-        android:focusable="true"
-        android:gravity="center_vertical"
-        android:minHeight="48dp"
-        android:paddingStart="12dp"
-        android:paddingEnd="12dp"
-        android:fontFamily="sans"
-        android:text="&lt; Back to collection"
-        android:textColor="@color/text_primary"
-        android:textSize="16sp"
-        android:textStyle="bold" />
-
     <include
         layout="@layout/view_pet_animation"
         android:layout_width="match_parent"
@@ -56,7 +39,7 @@
         android:progressBackgroundTint="@color/progress_track" />
 
     <TextView
-        android:id="@+id/pet_detail_description"
+        android:id="@+id/pet_detail_hatched_info"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:paddingTop="18dp"

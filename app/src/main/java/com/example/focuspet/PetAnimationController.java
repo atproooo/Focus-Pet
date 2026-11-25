@@ -155,8 +155,26 @@ final class PetAnimationController {
         showTransientExpression(expression, EXPRESSION_DURATION_MS);
         if (!ValueAnimator.areAnimatorsEnabled()) return;
 
+        playMotion(createInteractionAnimator(action));
+    }
+
+    void playTap() {
+        if (disposed || mode != Mode.INTERACTIVE) return;
+        if (PetInteraction.shouldShowTapExpression(ambientRandom.nextFloat())) {
+            PetExpression expression = PetExpressionSelector.choose(
+                    PetExpression.HAPPY, enabledExpressionKeys,
+                    PetExpression.CONTEXT_PET, ambientRandom);
+            showTransientExpression(expression, EXPRESSION_DURATION_MS);
+        }
+        if (!ValueAnimator.areAnimatorsEnabled()) return;
+
+        PetInteraction.Action action = ambientRandom.nextBoolean()
+                ? PetInteraction.Action.PET : PetInteraction.Action.PLAY;
+        playMotion(createInteractionAnimator(action));
+    }
+
+    private void playMotion(AnimatorSet animator) {
         stopMotion();
-        AnimatorSet animator = createInteractionAnimator(action);
         interactionAnimator = animator;
         animator.addListener(new AnimatorListenerAdapter() {
             @Override public void onAnimationEnd(Animator animation) {

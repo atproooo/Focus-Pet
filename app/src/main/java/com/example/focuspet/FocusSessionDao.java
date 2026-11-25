@@ -29,6 +29,11 @@ public interface FocusSessionDao {
     @Query("UPDATE focus_sessions SET rewardGranted = 1, status = 'CLAIMED' WHERE id = :id AND rewardGranted = 0")
     int claim(long id);
 
+    @Query("UPDATE focus_sessions SET status = 'CANCELLED', endedEarly = 1, rewardGranted = 0 "
+            + "WHERE id = :id AND status = 'COMPLETED_UNCLAIMED' "
+            + "AND xpReward = 0 AND coinReward = 0 AND essenceReward = 0 AND eggReward = 0")
+    int cancelEmptyPending(long id);
+
     @Query("SELECT * FROM focus_sessions ORDER BY startedAt DESC")
     List<FocusSession> history();
 

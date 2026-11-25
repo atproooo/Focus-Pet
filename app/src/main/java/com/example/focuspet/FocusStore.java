@@ -15,6 +15,7 @@ import com.example.focuspet.model.FocusPetModels.CosmeticItem;
 
 /** Offline MVP store; the repository boundary can later be backed by Room. */
 public final class FocusStore {
+    private static final int CALENDAR_METRICS_VERSION = 2;
     private final SharedPreferences preferences;
     private final Clock clock;
     /** Guards the whole check-balance -> deduct -> grant -> receipt critical section across all instances. */
@@ -100,11 +101,11 @@ public final class FocusStore {
         }
     }
 
-    /** Rebuild dates from claimed history so delayed and out-of-order claims stay consistent. */
+    /** Rebuild the calendar from session history so delayed claims stay consistent. */
     public void addClaimedRewards(int xp, int coins, int essence, boolean egg,
-                                  List<FocusSession> claimedHistory) {
+                                  List<FocusSession> sessionHistory) {
         synchronized (CALENDAR_LOCK) {
-            writeCalendar(rewardEditor(xp, coins, essence, egg), claimedHistory).apply();
+            writeCalendar(rewardEditor(xp, coins, essence, egg), sessionHistory).apply();
         }
     }
 
@@ -118,20 +119,34 @@ public final class FocusStore {
     }
 
     boolean needsCalendarInitialization() {
-        return !clock.getZone().getId().equals(preferences.getString("calendar_zone", ""));
+        return !clock.getZone().getId().equals(preferences.getString("calendar_zone", ""))
+                || preferences.getInt("calendar_metrics_version", 0)
+                < CALENDAR_METRICS_VERSION
+                || !LocalDate.now(clock).toString().equals(
+                preferences.getString("progress_date", ""));
     }
 
-    void initializeCalendarProgress(List<FocusSession> claimedHistory) {
+    void initializeCalendarProgress(List<FocusSession> sessionHistory) {
         synchronized (CALENDAR_LOCK) {
-            if (needsCalendarInitialization()) writeCalendar(preferences.edit(), claimedHistory).apply();
+            if (needsCalendarInitialization()) {
+                writeCalendar(preferences.edit(), sessionHistory).apply();
+            }
+        }
+    }
+
+    void refreshCalendarProgress(List<FocusSession> sessionHistory) {
+        synchronized (CALENDAR_LOCK) {
+            writeCalendar(preferences.edit(), sessionHistory).apply();
         }
     }
 
     private SharedPreferences.Editor writeCalendar(SharedPreferences.Editor editor,
-                                                   List<FocusSession> claimedHistory) {
+                                                   List<FocusSession> sessionHistory) {
         LocalDate today = LocalDate.now(clock);
-        FocusCalendar.Summary summary = FocusCalendar.summarize(claimedHistory, today, clock.getZone());
+        FocusCalendar.Summary summary = FocusCalendar.summarize(
+                sessionHistory, today, clock.getZone());
         return editor.putString("calendar_zone", clock.getZone().getId())
+                .putInt("calendar_metrics_version", CALENDAR_METRICS_VERSION)
                 .putString("progress_date", today.toString())
                 .putString("last_focus_date", summary.lastFocusDate == null ? "" : summary.lastFocusDate.toString())
                 .putInt("today_minutes", summary.todayMinutes).putInt("streak", summary.streak)
@@ -206,6 +221,33 @@ public final class FocusStore {
                 preferences.getStringSet("owned_pet_looks", Collections.emptySet())));
     }
 
+    public Set<String> ownedBackgroundKeys() {
+        Set<String> owned = new HashSet<>(preferences.getStringSet(
+                "owned_backgrounds", Collections.emptySet()));
+        owned.add(BackgroundCatalog.DEFAULT_KEY);
+        return Collections.unmodifiableSet(owned);
+    }
+
+    public String petBackgroundKey(long petId) {
+        if (petId <= 0) return BackgroundCatalog.DEFAULT_KEY;
+        String key = preferences.getString(
+                equippedItemPreference(petId, "background"), BackgroundCatalog.DEFAULT_KEY);
+        if (BackgroundCatalog.fromKey(key) == null) {
+            throw new IllegalStateException("Pet references an unknown background: " + key);
+        }
+        return key;
+    }
+
+    public boolean setPetBackground(long petId, String backgroundKey) {
+        synchronized (CALENDAR_LOCK) {
+            if (petId <= 0 || BackgroundCatalog.fromKey(backgroundKey) == null
+                    || !ownedBackgroundKeys().contains(backgroundKey)) return false;
+            return preferences.edit()
+                    .putString(equippedItemPreference(petId, "background"), backgroundKey)
+                    .commit();
+        }
+    }
+
     public int expressionStock(String expressionKey) {
         PetExpression expression = PetExpression.fromKey(expressionKey);
         return expression != null && expression.learnable
@@ -271,57 +313,115 @@ public final class FocusStore {
 
     /** Balance deduction, item grant and receipt use one atomic preference edit. */
     public PurchaseResult purchase(String productId, String requestId) {
+        return purchase(productId, 1, requestId);
+    }
+
+    public PurchaseResult purchase(String productId, int purchaseCount, String requestId) {
         ShopProduct product = ShopCatalog.product(productId);
         if (product == null) product = PetLookCatalog.product(productId);
         if (product == null) product = PetExpressionCatalog.product(productId);
-        return purchase(product, requestId);
+        if (product == null) {
+            AccessoryCatalog.Accessory accessory = AccessoryCatalog.fromProductId(productId);
+            if (accessory != null) product = accessory.product();
+        }
+        if (product == null) product = BackgroundCatalog.product(productId);
+        return purchase(product, purchaseCount, requestId);
     }
 
     PurchaseResult purchase(ShopProduct product, String requestId) {
+        return purchase(product, 1, requestId);
+    }
+
+    PurchaseResult purchase(ShopProduct product, int purchaseCount, String requestId) {
         synchronized (CALENDAR_LOCK) {
             if (product == null || !product.available) return PurchaseResult.INVALID_PRODUCT;
-            if (requestId == null || requestId.trim().isEmpty()) return PurchaseResult.INVALID_REQUEST;
+            if (purchaseCount < 1 || requestId == null || requestId.trim().isEmpty()) {
+                return PurchaseResult.INVALID_REQUEST;
+            }
             String receipt = preferences.getString("purchase_" + requestId, null);
-            if (receipt != null) return receipt.startsWith(product.id + "|")
-                    ? PurchaseResult.PURCHASED : PurchaseResult.INVALID_REQUEST;
+            if (receipt != null) {
+                if (!receipt.startsWith(product.id + "|")) return PurchaseResult.INVALID_REQUEST;
+                String[] receiptParts = receipt.split("\\|", -1);
+                int previousPurchaseCount = 1;
+                if (receiptParts.length >= 6) {
+                    try {
+                        previousPurchaseCount = Integer.parseInt(receiptParts[5]);
+                    } catch (NumberFormatException error) {
+                        return PurchaseResult.INVALID_REQUEST;
+                    }
+                }
+                return previousPurchaseCount == purchaseCount
+                        ? PurchaseResult.PURCHASED : PurchaseResult.INVALID_REQUEST;
+            }
+            if (product.productType != ProductType.PET_EXPRESSION && purchaseCount != 1) {
+                return PurchaseResult.INVALID_REQUEST;
+            }
+            if (product.price > Long.MAX_VALUE / purchaseCount) {
+                return PurchaseResult.INVALID_REQUEST;
+            }
+            long totalPrice = product.price * purchaseCount;
+            long quantityToGrant = (long) product.quantityGranted * purchaseCount;
             Set<String> owned = new HashSet<>(ownedCosmeticIds());
             Set<String> ownedLooks = new HashSet<>(ownedPetLookKeys());
+            Set<String> ownedBackgrounds = new HashSet<>(
+                    preferences.getStringSet("owned_backgrounds", Collections.emptySet()));
             if (product.productType == ProductType.COSMETIC && owned.contains(product.itemKey)) {
                 return PurchaseResult.ALREADY_OWNED;
             }
             if (product.productType == ProductType.PET_LOOK && ownedLooks.contains(product.itemKey)) {
                 return PurchaseResult.ALREADY_OWNED;
             }
-            if (product.productType == ProductType.PET_EXPRESSION) {
-                PetExpression expression = PetExpression.fromKey(product.itemKey);
-                if (expression == null || !expression.learnable
-                        || (long) expressionStock(product.itemKey) + product.quantityGranted
-                        > Integer.MAX_VALUE) {
+            if (product.productType == ProductType.PET_BACKGROUND) {
+                BackgroundCatalog.Background background =
+                        BackgroundCatalog.fromKey(product.itemKey);
+                if (background == null || background == BackgroundCatalog.DEFAULT) {
                     return PurchaseResult.INVALID_PRODUCT;
                 }
+                if (ownedBackgrounds.contains(product.itemKey)) {
+                    return PurchaseResult.ALREADY_OWNED;
+                }
+            }
+            if (product.productType == ProductType.PET_EXPRESSION) {
+                PetExpression expression = PetExpression.fromKey(product.itemKey);
+                if (expression == null || !expression.learnable) {
+                    return PurchaseResult.INVALID_PRODUCT;
+                }
+                if ((long) expressionStock(product.itemKey) + quantityToGrant > Integer.MAX_VALUE) {
+                    return PurchaseResult.INVALID_REQUEST;
+                }
+            }
+            if (product.productType == ProductType.COSMETIC
+                    && AccessoryCatalog.fromKey(product.itemKey) == null
+                    && ShopCatalog.cosmetic(product.itemKey) == null) {
+                return PurchaseResult.INVALID_PRODUCT;
             }
             int balance = product.currency == Currency.COINS ? coins() : lifeEssence();
-            if (balance < product.price) return PurchaseResult.INSUFFICIENT_RESOURCES;
+            if (balance < totalPrice) return PurchaseResult.INSUFFICIENT_RESOURCES;
             if (product.productType == ProductType.PET_EGG
                     && (long) petEggs() + product.quantityGranted > Integer.MAX_VALUE) return PurchaseResult.INVALID_REQUEST;
             SharedPreferences.Editor editor = preferences.edit()
-                    .putInt(product.currency == Currency.COINS ? "coins" : "life_essence", balance - (int) product.price);
+                    .putInt(product.currency == Currency.COINS ? "coins" : "life_essence",
+                            balance - (int) totalPrice);
             if (product.productType == ProductType.COSMETIC) {
                 owned.add(product.itemKey);
                 editor.putStringSet("owned_cosmetics", owned);
             } else if (product.productType == ProductType.PET_LOOK) {
                 ownedLooks.add(product.itemKey);
                 editor.putStringSet("owned_pet_looks", ownedLooks);
+            } else if (product.productType == ProductType.PET_BACKGROUND) {
+                ownedBackgrounds.add(product.itemKey);
+                editor.putStringSet("owned_backgrounds", ownedBackgrounds);
             } else if (product.productType == ProductType.PET_EXPRESSION) {
                 editor.putInt(expressionStockPreference(product.itemKey),
-                        expressionStock(product.itemKey) + product.quantityGranted);
+                        expressionStock(product.itemKey) + (int) quantityToGrant);
             } else if (product.productType == ProductType.PET_EGG) {
                 editor.putInt("pet_eggs", petEggs() + product.quantityGranted);
             } else {
                 return PurchaseResult.INVALID_PRODUCT;
             }
             editor.putString("purchase_" + requestId, product.id + "|" + product.currency + "|" + product.price
-                    + "|" + product.quantityGranted + "|" + System.currentTimeMillis());
+                    + "|" + product.quantityGranted + "|" + System.currentTimeMillis()
+                    + "|" + purchaseCount);
             return editor.commit() ? PurchaseResult.PURCHASED : PurchaseResult.STORAGE_ERROR;
         }
     }
@@ -340,20 +440,35 @@ public final class FocusStore {
 
     boolean equip(long petId, String itemId) {
         synchronized (CALENDAR_LOCK) {
+            if (petId <= 0 || !ownedCosmeticIds().contains(itemId)) return false;
+            AccessoryCatalog.Accessory accessory = AccessoryCatalog.fromKey(itemId);
+            if (accessory != null) {
+                return preferences.edit()
+                        .putString(equippedItemPreference(petId, "accessory"), itemId)
+                        .commit();
+            }
             CosmeticItem item = ShopCatalog.cosmetic(itemId);
-            return item != null && ownedCosmeticIds().contains(itemId)
-                    && preferences.edit().putString("pet_equipped_" + petId + "_" + item.slotKey, itemId).commit();
+            return item != null && preferences.edit()
+                    .putString(equippedItemPreference(petId, item.slotKey), itemId).commit();
         }
     }
 
     public String equippedItemId(long petId, String slot) {
-        return preferences.getString("pet_equipped_" + petId + "_" + slot, null);
+        return preferences.getString(equippedItemPreference(petId, slot), null);
+    }
+
+    public String equippedAccessoryId(long petId) {
+        return equippedItemId(petId, "accessory");
     }
 
     public void unequip(long petId, String slot) {
         synchronized (CALENDAR_LOCK) {
-            preferences.edit().remove("pet_equipped_" + petId + "_" + slot).apply();
+            preferences.edit().remove(equippedItemPreference(petId, slot)).apply();
         }
+    }
+
+    private String equippedItemPreference(long petId, String slot) {
+        return "pet_equipped_" + petId + "_" + slot;
     }
 
     public void addDebugResources(int coins, int essence, int eggs) {

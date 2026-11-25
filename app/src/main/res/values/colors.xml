@@ -6,7 +6,7 @@
 
     <color name="background_app">#FFFDF0</color>
     <color name="background_card">#E7E2D0</color>
-    <color name="background_accent">#B9E4F6</color>
+    <color name="background_accent">#C7EBFA</color>
     <color name="navigation_selected">#D6D1BF</color>
 
     <color name="button_primary">#E498D0</color>
@@ -15,12 +15,12 @@
     <color name="button_secondary">#FFF9B7</color>
     <color name="button_secondary_pressed">#E6DE91</color>
     <color name="button_outline">#2B2F2D</color>
-    <color name="button_debug">#2B2F2E</color>
-    <color name="progress_foreground">#A5CDF2</color>
+    <color name="button_debug">#ADF0E0</color>
+    <color name="progress_foreground">#2B2F2D</color>
     <color name="progress_track">#7D8374</color>
 
     <color name="desktop_background">#FFFDF0</color>
-    <color name="window_title">#2E529B</color>
+    <color name="window_title">#8672B1</color>
     <color name="window_title_highlight">@color/window_title</color>
     <color name="window_title_text">#FFFDF0</color>
     <color name="window_border">#273746</color>
